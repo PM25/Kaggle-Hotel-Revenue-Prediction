@@ -54,7 +54,7 @@ class ClassificationModel(nn.Module):
         x = self.dropout(F.relu(self.fc4(x)))
         x = F.relu(self.fc5(x))
         x = self.dropout(F.relu(self.fc6(x)))
-        x = self.fc7(x).squeeze()
+        x = self.fc7(x)
         return x
 
 
