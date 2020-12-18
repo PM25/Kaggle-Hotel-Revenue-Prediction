@@ -1,3 +1,4 @@
+#%%
 import numpy as np
 import pandas as pd
 
@@ -55,14 +56,21 @@ def processing_data(binary=False):
     for col in nan_cols:
         X_df[col] = X_df[col].fillna("Null").astype(str)
 
-    for col in X_df.select_dtypes(include=["object"]).columns:
-        X_df[col] = X_df[col].factorize()[0]
-    # X_df = pd.get_dummies(X_df)
+    # for col in X_df.select_dtypes(include=["object"]).columns:
+    #     X_df[col] = X_df[col].factorize()[0]
+    X_df = pd.get_dummies(X_df)
     print(f"Columns that contain NaN: {list(get_columns_with_nan(X_df))}")
 
+    return (X_df, y_df), None
     X_np = X_df.to_numpy()
     y_np = y_df.to_numpy()
     if binary:
         return (X_np, y_np)
     else:
         return (X_np, y_np), reservation_status_cats
+
+
+if __name__ == "__main__":
+    (x, y), _ = processing_data()
+    x.to_csv("train_x.csv", index=False)
+# %%

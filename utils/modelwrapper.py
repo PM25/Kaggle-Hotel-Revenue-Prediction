@@ -118,7 +118,6 @@ class ModelWrapper(DefaultSetting):
             if val_loader is None:
                 print(f"train loss: {train_loss:.3f}")
             else:
-                # FIXME: fixed the problem that first validation is not correct
                 val_loss = self.validation(val_loader)
                 print(f"train loss: {train_loss:.3f}, val loss: {val_loss:.3f}")
 
