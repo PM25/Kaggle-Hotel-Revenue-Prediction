@@ -1,6 +1,6 @@
 # %%
 from utils import *
-from datapreprocessing import processing_data_is_canceled
+from datapreprocessing import processing_data
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 
 #%%
-X_np, y_np = processing_data_is_canceled()
+X_np, y_np = processing_data(binary=True)
 print(f"X_np's shape: {X_np.shape}")
 print(f"y_np's shape: {y_np.shape}")
 

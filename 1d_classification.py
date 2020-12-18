@@ -1,6 +1,6 @@
 # %%
 from utils import *
-from datapreprocessing import processing_data_reservation_status
+from datapreprocessing import processing_data
 
 import torch
 import torch.nn as nn
@@ -8,7 +8,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 #%%
-(X_np, y_np), reservation_status_cats = processing_data_reservation_status()
+(X_np, y_np), reservation_status_cats = processing_data()
 print(f"X_np's shape: {X_np.shape}")
 print(f"y_np's shape: {y_np.shape}")
 
