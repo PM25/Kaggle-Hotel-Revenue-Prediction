@@ -33,3 +33,12 @@ if __name__ == "__main__":
     modelwrapper.classification_report(
         test_loader, ["Not Cancel", "Cancel"], visualize=True, binary=True
     )
+
+    # get prediction results
+    model.cpu()
+    preds = []
+    for data in train_loader:
+        X, y = data
+        outputs = model(X)
+        predicted = torch.round(outputs)
+        preds += predicted.squeeze().tolist()

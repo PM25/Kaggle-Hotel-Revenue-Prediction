@@ -61,7 +61,6 @@ def processing_data(binary=False):
     X_df = pd.get_dummies(X_df)
     print(f"Columns that contain NaN: {list(get_columns_with_nan(X_df))}")
 
-    return (X_df, y_df), None
     X_np = X_df.to_numpy()
     y_np = y_df.to_numpy()
     if binary:
@@ -72,5 +71,4 @@ def processing_data(binary=False):
 
 if __name__ == "__main__":
     (x, y), _ = processing_data()
-    x.to_csv("train_x.csv", index=False)
 # %%

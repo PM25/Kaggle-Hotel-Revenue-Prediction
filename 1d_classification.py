@@ -26,9 +26,18 @@ if __name__ == "__main__":
     modelwrapper = ModelWrapper(model, loss_func, optimizer)
 
     # training
-    model = modelwrapper.train(train_loader, val_loader, max_epochs=50)
+    model = modelwrapper.train(train_loader, val_loader, max_epochs=1)
 
     # evaluate the model
     modelwrapper.classification_report(
         test_loader, reservation_status_cats, visualize=True
     )
+
+    # get prediction results
+    model.cpu()
+    preds = []
+    for data in train_loader:
+        X, y = data
+        outputs = model(X)
+        _, predicted = torch.max(outputs, 1)
+        preds += predicted.squeeze().tolist()
