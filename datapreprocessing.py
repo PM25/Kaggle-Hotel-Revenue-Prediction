@@ -27,24 +27,29 @@ class Data:
     def get_y_cats(self):
         return self.y_cats
 
-    def processing(self, target="is_canceled", use_dummies=True, normalize=True):
-        train_df = self.train_df
+    def processing(
+        self, target="is_canceled", use_dummies=True, normalize=True, test=False
+    ):
+        train_df = self.train_df.copy()
 
-        exclude_columns = [
-            target,
-            "is_canceled",
-            "ID",
-            "adr",
-            "reservation_status",
-            "reservation_status_date",
-        ]
+        if test == False:
+            exclude_columns = [
+                # target,
+                "is_canceled",
+                "ID",
+                "adr",
+                "reservation_status",
+                "reservation_status_date",
+            ]
+        else:
+            exclude_columns = ["ID"]
 
         if target == "is_canceled" or target == "reservation_status":
-            train_df["expected_room"] = 0
-            train_df.loc[
-                train_df["reserved_room_type"] == train_df["assigned_room_type"],
-                "expected_room",
-            ] = 1
+            # train_df["expected_room"] = 0
+            # train_df.loc[
+            #     train_df["reserved_room_type"] == train_df["assigned_room_type"],
+            #     "expected_room",
+            # ] = 1
             train_df["net_cancelled"] = 0
             train_df.loc[
                 train_df["previous_cancellations"]
@@ -72,12 +77,15 @@ class Data:
 
         # TrainDataVisualization(train_df, None,).correlation_matrix().show()
 
-        if is_numeric_dtype(train_df[target]):
-            y_df = train_df[target]
+        if test == False:
+            if is_numeric_dtype(train_df[target]):
+                y_df = train_df[target]
+            else:
+                y_df = train_df[target].astype("category")
+                self.y_cats = y_df.cat.categories
+                y_df = y_df.cat.codes  # convert categories data to numeric codes
         else:
-            y_df = train_df[target].astype("category")
-            self.y_cats = y_df.cat.categories
-            y_df = y_df.cat.codes  # convert categories data to numeric codes
+            y_df = None
 
         X_df = train_df.drop(exclude_columns, axis=1)
         X_df.children = X_df.children.fillna(0)
@@ -99,7 +107,11 @@ class Data:
         print(f"Columns that contain NaN: {list(get_columns_with_nan(X_df))}")
         print(f"Excluded columns: {exclude_columns}")
 
-        X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
+        if y_df is None:
+            y_np = None
+        else:
+            y_np = y_df.to_numpy()
+        X_np = X_df.to_numpy()
 
         # TODO: make this function into class and store scaler for new data to use
         if normalize:

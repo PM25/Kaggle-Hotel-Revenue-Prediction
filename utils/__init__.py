@@ -7,7 +7,6 @@ from utils.models import (
     BinaryClassificationModel,
     Input1DModel,
     Input1DModelSimplified,
-    ImageClassificationModel,
 )
 from utils.visualization import Visualization, TrainDataVisualization
 
@@ -19,7 +18,6 @@ __all__ = [
     "BinaryClassificationModel",
     "Input1DModel",
     "Input1DModelSimplified",
-    "ImageClassificationModel",
     "MLModelWrapper",
     "Visualization",
     "TrainDataVisualization",
