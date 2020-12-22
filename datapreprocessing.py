@@ -2,6 +2,21 @@
 import numpy as np
 import pandas as pd
 
+MONTHS = {
+    "January": 1,
+    "February": 2,
+    "March": 3,
+    "April": 4,
+    "May": 5,
+    "June": 6,
+    "July": 7,
+    "August": 8,
+    "September": 9,
+    "October": 10,
+    "November": 11,
+    "December": 12,
+}
+
 
 def get_columns_with_nan(df):
     nan_values = df.isna()
@@ -68,6 +83,48 @@ def processing_data(binary=False):
         return (X_np, y_np)
     else:
         return (X_np, y_np), reservation_status_cats
+
+    def processing_cnn(self):
+        train_df, _ = self.processing(None, use_dummies=False, test=True)
+        train_df_label = pd.read_csv("data/train_label.csv", index_col="arrival_date")
+
+        groupby_date = train_df.groupby(
+            ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
+        )
+
+        max_booking_a_day = max(
+            [len(value) for group, value in groupby_date.groups.items()]
+        )
+
+        X, y = [], []
+        for group, data in groupby_date.groups.items():
+            padding_sz = max_booking_a_day - len(data)
+            nfeatures = groupby_date.get_group(group).shape[1]
+            columns = groupby_date.get_group(group).columns
+            padding = pd.DataFrame(np.zeros((padding_sz, nfeatures)), columns=columns)
+            padding -= 1
+            processed_data = pd.concat([groupby_date.get_group(group), padding], axis=0)
+            date_str = f"{group[0]}-{group[1]:02d}-{group[2]:02d}"
+            label = train_df_label["label"][date_str]
+            X.append(processed_data.to_numpy())
+            y.append(label)
+
+        return (np.expand_dims(np.array(X), axis=1), np.array(y))
+
+    def processing_1d_cnn(self, previous=5):
+        train_df_X, train_df_label = self.processing2(use_dummies=False)
+
+        X_list, y_list = [], []
+        for i in range(previous - 1, train_df_X.shape[0]):
+            X = train_df_X[i - previous + 1 : i + 1]
+            y = train_df_label[i]
+            X_list.append(X)
+            y_list.append(y)
+
+        return (np.array(X_list), np.array(y_list))
+
+
+#%%
 
 
 if __name__ == "__main__":
