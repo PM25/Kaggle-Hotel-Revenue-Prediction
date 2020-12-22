@@ -2,6 +2,7 @@ from utils.checkpoint import Checkpoint
 from utils.default import DefaultSetting
 from utils.earlystopping import EarlyStopping
 from utils.visualization import Visualization
+from utils.metrics import regression_report
 
 import torch
 import torch.nn as nn
@@ -118,6 +119,7 @@ class ModelWrapper(DefaultSetting):
             if val_loader is None:
                 print(f"train loss: {train_loss:.3f}")
             else:
+                # FIXME: fixed the problem that first validation is not correct
                 val_loss = self.validation(val_loader)
                 print(f"train loss: {train_loss:.3f}, val loss: {val_loss:.3f}")
 
@@ -179,5 +181,25 @@ class ModelWrapper(DefaultSetting):
             vis.classification_report()
             vis.show()
         report = classification_report(y_true, y_pred, target_names=target_names)
+        print(report)
+        return report
+
+    # classification report of the model on test data
+    @torch.no_grad()
+    def regression_report(self, test_loader):
+        print("-" * 10, "Regression Report", "-" * 10)
+        print(f"loss: {self.validation(test_loader)}")
+        model = self.model
+        model.eval().to(self.device)
+
+        y_pred, y_true = [], []
+        for data in test_loader:
+            inputs, labels = data
+            inputs, labels = inputs.to(self.device), labels.to(self.device).long()
+            predicted = model(inputs)
+
+            y_true += labels.squeeze().cpu().tolist()
+            y_pred += predicted.squeeze().cpu().tolist()
+        report = regression_report(y_true, y_pred, inputs.shape[1])
         print(report)
         return report

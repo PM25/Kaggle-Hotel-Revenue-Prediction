@@ -5,9 +5,11 @@ from utils.loaddata import LoadData
 from utils.mlmodelwrapper import MLModelWrapper
 from utils.models import (
     BinaryClassificationModel,
-    ClassificationModel,
+    Input1DModel,
+    Input1DModelSimplified,
     ImageClassificationModel,
 )
+from utils.visualization import Visualization, TrainDataVisualization
 
 __all__ = [
     "Checkpoint",
@@ -15,7 +17,10 @@ __all__ = [
     "ModelWrapper",
     "LoadData",
     "BinaryClassificationModel",
-    "ClassificationModel",
+    "Input1DModel",
+    "Input1DModelSimplified",
     "ImageClassificationModel",
     "MLModelWrapper",
+    "Visualization",
+    "TrainDataVisualization",
 ]

@@ -2,14 +2,16 @@
 from utils import *
 from datapreprocessing import processing_data
 
-from sklearn.model_selection import train_test_split
-
 # start from here!
 if __name__ == "__main__":
-    (X_np, y_np), _ = processing_data(binary=True)
-    train_X, test_X, train_y, test_y = train_test_split(
-        X_np, y_np, test_size=0.25, random_state=0
-    )
+    # test classifiers
+    X_df, y_df = processing_data("is_canceled")
+    X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
+    mlmodelwrapper = MLModelWrapper(X_np, y_np)
+    mlmodelwrapper.quick_test("classifier")
 
-    mlmodelwrapper = MLModelWrapper(train_X, train_y, test_X, test_y)
-    mlmodelwrapper.test_classifiers()
+    # test regressors
+    X_df, y_df = processing_data("adr")
+    X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
+    mlmodelwrapper = MLModelWrapper(X_np, y_np)
+    mlmodelwrapper.quick_test("regressor")

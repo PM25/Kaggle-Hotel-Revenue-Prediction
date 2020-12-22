@@ -1,6 +1,6 @@
 # %%
 from utils import *
-from datapreprocessing import processing_data
+from datapreprocessing import Data
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 
 #%%
-X_np, y_np = processing_data(binary=True)
+X_np, y_np = Data().processing(target="is_canceled", use_dummies=False, normalize=False)
 print(f"X_np's shape: {X_np.shape}")
 print(f"y_np's shape: {y_np.shape}")
 
@@ -33,12 +33,3 @@ if __name__ == "__main__":
     modelwrapper.classification_report(
         test_loader, ["Not Cancel", "Cancel"], visualize=True, binary=True
     )
-
-    # get prediction results
-    model.cpu()
-    preds = []
-    for data in train_loader:
-        X, y = data
-        outputs = model(X)
-        predicted = torch.round(outputs)
-        preds += predicted.squeeze().tolist()
