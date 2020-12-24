@@ -8,7 +8,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import pandas as pd
-from sklearn.ensemble import BaggingRegressor
+from sklearn.ensemble import BaggingRegressor, HistGradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 
 #%%

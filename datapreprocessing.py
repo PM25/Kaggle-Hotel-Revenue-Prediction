@@ -108,7 +108,9 @@ class Data:
 
         return df
 
-    def processing(self, target="is_canceled", use_dummies=False, normalize=False):
+    def processing(
+        self, target="is_canceled", dropout=[], use_dummies=False, normalize=False
+    ):
         processed_df = self.processed_df.copy()
 
         if is_numeric_dtype(processed_df[target]):
@@ -119,6 +121,7 @@ class Data:
             y_df = y_df.cat.codes  # convert categories data to numeric codes
 
         X_df = self.postprocessing(processed_df, use_dummies=False)
+        X_df = X_df.drop(dropout, axis=1)
 
         y_np = y_df.to_numpy()
         X_np = X_df.to_numpy()
