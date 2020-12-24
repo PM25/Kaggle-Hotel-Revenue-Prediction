@@ -1,17 +1,22 @@
 #%%
 from utils import *
-from datapreprocessing import processing_data
+from datapreprocessing import Data
 
 # start from here!
 if __name__ == "__main__":
     # test classifiers
-    X_df, y_df = processing_data("is_canceled")
-    X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
+    data = Data()
+    X_df, y_df = data.processing("is_canceled", use_dummies=False, normalize=False)
     mlmodelwrapper = MLModelWrapper(X_np, y_np)
     mlmodelwrapper.quick_test("classifier")
 
     # test regressors
-    X_df, y_df = processing_data("adr")
-    X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
+    data = Data()
+    X_df, y_df = data.processing("adr", use_dummies=False, normalize=False)
+    mlmodelwrapper = MLModelWrapper(X_np, y_np)
+    mlmodelwrapper.quick_test("regressor")
+
+    data = Data()
+    X_np, y_np = data.processing("revenue", use_dummies=False, normalize=False)
     mlmodelwrapper = MLModelWrapper(X_np, y_np)
     mlmodelwrapper.quick_test("regressor")
