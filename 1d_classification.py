@@ -1,6 +1,6 @@
 # %%
 from utils import *
-from datapreprocessing import Data
+from data_processing import Data
 
 import torch
 import torch.nn as nn

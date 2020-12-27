@@ -1,6 +1,6 @@
 # %%
 from utils import *
-from datapreprocessing import Data
+from data_processing import Data
 
 import torch
 import torch.nn as nn
@@ -8,34 +8,12 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import pandas as pd
-from sklearn.ensemble import BaggingRegressor, HistGradientBoostingRegressor
-from sklearn.model_selection import train_test_split
 
 #%%
 data = Data()
-X_np, y_np = data.processing("revenue", use_dummies=False, normalize=False)
+X_np, y_np = data.processing("revenue", use_dummies=False, normalize=True)
 print(f"X_np's shape: {X_np.shape}")
 print(f"y_np's shape: {y_np.shape}")
-
-reg = BaggingRegressor()
-train_x, test_x, train_y, test_y = train_test_split(X_np, y_np, test_size=0.25)
-reg.fit(train_x, train_y)
-score = reg.score(test_x, test_y)
-print(score)
-
-#%%
-X = data.processing_test_data()
-pred = reg.predict(X)
-test_df = pd.read_csv("data/test.csv", index_col="ID")
-a = pd.DataFrame(pred)
-a.columns = ["pred"]
-print(test_df.shape)
-print(a.shape)
-result = pd.concat([test_df, a], axis=1)
-
-# print(result)
-#%%
-result.to_csv("test_result.csv")
 
 
 #%%

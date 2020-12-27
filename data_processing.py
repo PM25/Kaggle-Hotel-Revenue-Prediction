@@ -12,6 +12,8 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from sklearn.compose import ColumnTransformer
 
 MONTHS = {
     "January": 1,
@@ -38,8 +40,9 @@ def get_columns_with_nan(df):
 
 # target is one of the ["is_canceled", "reservation_status", "adr"]
 class Data:
-    def __init__(self, fname="data/train.csv"):
+    def __init__(self, fname="data/train.csv", use_dummies=False):
         self.train_df = pd.read_csv(fname, index_col="ID")
+        self.label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
         self.processed_df = self.add_features(self.train_df)
         # self.processed_df = self.add_sklearn_prediction(self.processed_df)
         print(f"Shape of Read Data: {self.train_df.shape}")
@@ -47,6 +50,10 @@ class Data:
         self.y_cats = None
         self.adr_regs = []
         self.is_canceled_clf = []
+        self.column_transformer = None
+        self.use_dummies = use_dummies
+        self.label_encoders = None
+        self.onehot_encoders = None
 
     def __call__(self, fname):
         self.train_df = pd.read_csv(fname, index_col="ID")
@@ -56,7 +63,7 @@ class Data:
     def processing_test_data(self, fname="data/test.csv"):
         test_df = pd.read_csv(fname, index_col="ID")
         processed_df = self.add_features(test_df, test=True)
-        # processed_df = self.add_sklearn_prediction(processed_df)
+        # processed_df = self.add_sklearn_prediction(processed_df, test=True)
         X = self.postprocessing(self.processed_df)
         return X
 
@@ -80,7 +87,7 @@ class Data:
 
         return train_df
 
-    def postprocessing(self, df, use_dummies=False):
+    def postprocessing(self, df, log=False):
         exclude_columns = [
             "is_canceled",
             "adr",
@@ -88,29 +95,30 @@ class Data:
             "reservation_status_date",
             "revenue",
         ]
-        df = df.drop(exclude_columns, axis=1)
+        df = df.drop(exclude_columns, axis=1, errors="ignore")
 
+        df.arrival_date_month = df.arrival_date_month.map(MONTHS)
         df.children = df.children.fillna(0)
         nan_cols = list(get_columns_with_nan(df))
-        print(f"Columns that contain NaN: {nan_cols}")
+        if log:
+            print(f"Columns that contain NaN: {nan_cols}")
 
         for col in nan_cols:
             df[col] = df[col].fillna("Null").astype(str)
 
-        if use_dummies:
-            df = pd.get_dummies(df)
+        df = self.label_encoder(df)
+        if self.use_dummies:
+            np = self.onehot_encoder(df)
         else:
-            for col in df.select_dtypes(include=["object"]).columns:
-                df[col] = df[col].factorize()[0]
+            np = df.to_numpy()
 
-        print(f"Columns that contain NaN: {list(get_columns_with_nan(df))}")
-        print(f"Excluded columns: {exclude_columns}")
+        if log:
+            print(f"Columns that contain NaN: {list(get_columns_with_nan(df))}")
+            print(f"Excluded columns: {exclude_columns}")
 
-        return df
+        return np
 
-    def processing(
-        self, target="is_canceled", dropout=[], use_dummies=False, normalize=False
-    ):
+    def processing(self, target="is_canceled", dropout=[], normalize=False):
         processed_df = self.processed_df.copy()
 
         if is_numeric_dtype(processed_df[target]):
@@ -120,11 +128,10 @@ class Data:
             self.y_cats = y_df.cat.categories
             y_df = y_df.cat.codes  # convert categories data to numeric codes
 
-        X_df = self.postprocessing(processed_df, use_dummies=False)
-        X_df = X_df.drop(dropout, axis=1)
+        processed_df = processed_df.drop(dropout, axis=1, errors="ignore")
+        X_np = self.postprocessing(processed_df, log=True)
 
         y_np = y_df.to_numpy()
-        X_np = X_df.to_numpy()
 
         # TODO: make this function into class and store scaler for new data to use
         if normalize:
@@ -213,72 +220,84 @@ class Data:
 
         return (np.array(X_list), np.array(y_list))
 
-    def train_sklearn_models(self, use_dummies=False, normalize=False):
-        processed_df = self.processed_df.copy()
-
-        # add predicted is_canceled column
-        X_train, y_train = self.processing(
-            "is_canceled", use_dummies=use_dummies, normalize=normalize
-        )
-
-        for clf in [AdaBoostClassifier(), RandomForestClassifier()]:
-            X, y = X_train.copy(), y_train.copy()
-            clf.fit(X, y)
-            score = clf.score(X, y)
-            print(f"Score of Classifier: {score}")
-            self.is_canceled_clf.append(clf)
-
-        # add predicted adr column
-        X_train, y_train = self.processing(
-            "adr", use_dummies=use_dummies, normalize=normalize
-        )
-
-        for reg in [BaggingRegressor(), RandomForestRegressor()]:
-            X, y = X_train.copy(), y_train.copy()
-            reg.fit(X, y)
-            score = reg.score(X, y)
-            print(f"Score of Regressor: {score}")
-            self.adr_regs.append(reg)
-
-    def add_sklearn_prediction(
-        self, df, use_dummies=False, normalize=False, test=False
-    ):
+    def add_sklearn_prediction(self, df, normalize=False, test=False):
         processed_df = df.copy()
         out_processed_df = processed_df.copy()
 
         # add predicted is_canceled column
-        X_train, y_train = self.processing(
-            "is_canceled", use_dummies=use_dummies, normalize=normalize
-        )
+        X_train, y_train = self.processing("is_canceled", normalize=normalize)
 
-        for clf in [AdaBoostClassifier(), RandomForestClassifier()]:
+        for clf in [AdaBoostClassifier, RandomForestClassifier]:
             X, y = X_train.copy(), y_train.copy()
-            clf.fit(X, y)
-            score = clf.score(X, y)
-            print(f"Score of Classifier: {score}")
-            pred = clf.predict(self.postprocessing(processed_df))
+
+            eval_clf = clf()
+            train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.25)
+            eval_clf.fit(train_X, train_y)
+            print("clf score:", eval_clf.score(test_X, test_y))
+
+            c = clf()
+            c.fit(X, y)
+            pred = c.predict(self.postprocessing(processed_df, test=test))
             out_processed_df = pd.concat([out_processed_df, pd.DataFrame(pred)], axis=1)
 
         # add predicted adr column
-        X_train, y_train = self.processing(
-            "adr", use_dummies=use_dummies, normalize=normalize
-        )
+        X_train, y_train = self.processing("adr", normalize=normalize)
 
-        for reg in [BaggingRegressor(), RandomForestRegressor()]:
+        for reg in [BaggingRegressor, RandomForestRegressor]:
             X, y = X_train.copy(), y_train.copy()
-            reg.fit(X, y)
-            score = reg.score(X, y)
-            print(f"Score of Regressor: {score}")
-            pred = reg.predict(self.postprocessing(processed_df))
+
+            eval_reg = reg()
+            train_X, test_X, train_y, test_y = train_test_split(X, y, test_size=0.25)
+            eval_reg.fit(train_X, train_y)
+            print("reg score:", eval_reg.score(test_X, test_y))
+
+            r = reg()
+            r.fit(X, y)
+            pred = r.predict(self.postprocessing(processed_df, test=test))
             out_processed_df = pd.concat([out_processed_df, pd.DataFrame(pred)], axis=1)
 
         return out_processed_df
 
+    def onehot_encoder(self, df, refit=False):
+        cat_cols_idx = []
+        for idx, cname in enumerate(df.columns):
+            if is_string_dtype(df[cname]):
+                cat_cols_idx.append(idx)
+        print(f"string columns: {[df.columns[idx] for idx in cat_cols_idx]}")
+
+        if refit == False and self.column_transformer != None:
+            np = self.column_transformer.transform(df).toarray()
+        else:
+            self.column_transformer = ColumnTransformer(
+                [("encoder", OneHotEncoder(handle_unknown="ignore"), cat_cols_idx)],
+                remainder="passthrough",
+            )
+            np = self.column_transformer.fit_transform(df).toarray()
+        return np
+
+    def label_encoder(self, df, refit=False):
+        if self.label_encoders != None and refit == False:
+            for cname, encoder in self.label_encoders.items():
+                df[cname] = encoder.transform(df[cname])
+        else:
+            encoders = {}
+            for cname in df.columns:
+                if is_string_dtype(df[cname]):
+                    encoders[cname] = LabelEncoder()
+                    df[cname] = encoders[cname].fit_transform(df[cname])
+                    df[cname] = df[cname].astype("category")
+            self.label_encoders = encoders
+
+        return df
+
 
 #%%
 if __name__ == "__main__":
-    data = Data()
+    data = Data(use_dummies=True)
     # X, y = data.processing("adr", use_dummies=False)
     # X, y = data.processing("revenue")
-    X, y = data.processing("adr")
+    X1, y1 = data.processing("adr")
+    X2 = data.processing_test_data("data/train.csv")
+    print(np.array_equal(X1, X2))
+
 # %%
