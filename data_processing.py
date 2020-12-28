@@ -12,7 +12,7 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder, LabelBinarizer
 from sklearn.compose import ColumnTransformer
 
 MONTHS = {
@@ -64,7 +64,7 @@ class Data:
         test_df = pd.read_csv(fname, index_col="ID")
         processed_df = self.add_features(test_df, test=True)
         # processed_df = self.add_sklearn_prediction(processed_df, test=True)
-        X = self.postprocessing(self.processed_df)
+        X = self.postprocessing(processed_df)
         return X
 
     def get_y_cats(self):
@@ -108,15 +108,13 @@ class Data:
 
         df = self.label_encoder(df)
         if self.use_dummies:
-            np = self.onehot_encoder(df)
-        else:
-            np = df.to_numpy()
+            df = self.onehot_encoder(df)
 
         if log:
             print(f"Columns that contain NaN: {list(get_columns_with_nan(df))}")
             print(f"Excluded columns: {exclude_columns}")
 
-        return np
+        return df
 
     def processing(self, target="is_canceled", dropout=[], normalize=False):
         processed_df = self.processed_df.copy()
@@ -129,57 +127,16 @@ class Data:
             y_df = y_df.cat.codes  # convert categories data to numeric codes
 
         processed_df = processed_df.drop(dropout, axis=1, errors="ignore")
-        X_np = self.postprocessing(processed_df, log=True)
-
-        y_np = y_df.to_numpy()
+        X_df = self.postprocessing(processed_df, log=True)
 
         # TODO: make this function into class and store scaler for new data to use
         if normalize:
             if self.scaler is None:
                 self.scaler = MinMaxScaler(feature_range=(0, 1))
-                self.scaler.fit(X_np)
-            X_np = self.scaler.transform(X_np)
+                self.scaler.fit(X_df)
+            X_df = self.scaler.transform(X_df)
 
-        return (X_np, y_np)
-
-    def processing_revenue(self, use_dummies=False, normalize=True):
-        train_df = self.processed_df.copy()
-
-        revenue_df = (
-            train_df["stays_in_weekend_nights"] + train_df["stays_in_week_nights"]
-        ) * train_df["adr"]
-
-        X_df = train_df.drop(
-            ["is_canceled", "adr", "reservation_status", "reservation_status_date",],
-            axis=1,
-        )
-
-        X_df.children = X_df.children.fillna(0)
-        nan_cols = list(get_columns_with_nan(X_df))
-        print(f"Columns that contain NaN: {nan_cols}")
-
-        for col in nan_cols:
-            X_df[col] = X_df[col].fillna("Null").astype(str)
-
-        if use_dummies:
-            X_df = pd.get_dummies(X_df)
-        else:
-            for col in X_df.select_dtypes(include=["object"]).columns:
-                X_df[col] = X_df[col].factorize()[0]
-
-        print(f"Columns that contain NaN: {list(get_columns_with_nan(X_df))}")
-
-        X_np = X_df.to_numpy()
-        y_np = revenue_df.to_numpy()
-
-        # TODO: make this function into class and store scaler for new data to use
-        if normalize:
-            if self.scaler is None:
-                self.scaler = MinMaxScaler(feature_range=(0, 1))
-                self.scaler.fit(X_np)
-            X_np = self.scaler.transform(X_np)
-
-        return (X_np, y_np)
+        return (X_df, y_df)
 
     def processing_cnn(self):
         train_df, _ = self.processing(None, use_dummies=False, test=True)
@@ -259,26 +216,40 @@ class Data:
         return out_processed_df
 
     def onehot_encoder(self, df, refit=False):
-        cat_cols_idx = []
-        for idx, cname in enumerate(df.columns):
-            if is_string_dtype(df[cname]):
-                cat_cols_idx.append(idx)
-        print(f"string columns: {[df.columns[idx] for idx in cat_cols_idx]}")
-
-        if refit == False and self.column_transformer != None:
-            np = self.column_transformer.transform(df).toarray()
+        if self.onehot_encoders != None and refit == False:
+            for cname, encoder in self.onehot_encoders.items():
+                transformed_col = encoder.transform(df[[cname]])
+                transformed_cols_df = pd.DataFrame(
+                    transformed_col, columns=encoder.get_feature_names()
+                )
+                df = pd.concat([df, transformed_cols_df], axis=1).drop([cname], axis=1)
         else:
-            self.column_transformer = ColumnTransformer(
-                [("encoder", OneHotEncoder(handle_unknown="ignore"), cat_cols_idx)],
-                remainder="passthrough",
-            )
-            np = self.column_transformer.fit_transform(df).toarray()
-        return np
+            encoders = {}
+            for cname in df.columns:
+                if is_string_dtype(df[cname]):
+                    encoders[cname] = OneHotEncoder(
+                        handle_unknown="ignore", sparse=False
+                    )
+                    transformed_col = encoders[cname].fit_transform(df[[cname]])
+                    transformed_cols_df = pd.DataFrame(
+                        transformed_col,
+                        columns=encoders[cname].get_feature_names([cname]),
+                    )
+                    df = pd.concat([df, transformed_cols_df], axis=1).drop(
+                        [cname], axis=1
+                    )
+            self.onehot_encoders = encoders
+
+        return df
 
     def label_encoder(self, df, refit=False):
         if self.label_encoders != None and refit == False:
             for cname, encoder in self.label_encoders.items():
-                df[cname] = encoder.transform(df[cname])
+                encoder_dict = dict(
+                    zip(encoder.classes_, encoder.transform(encoder.classes_))
+                )
+                df[cname] = df[cname].apply(lambda x: encoder_dict.get(x, -1))
+                # df[cname] = encoder.transform(df[cname])
         else:
             encoders = {}
             for cname in df.columns:

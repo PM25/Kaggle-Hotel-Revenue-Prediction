@@ -10,8 +10,8 @@ import torch.nn.functional as F
 import pandas as pd
 
 #%%
-data = Data()
-X_np, y_np = data.processing("revenue", use_dummies=False, normalize=True)
+data = Data(use_dummies=False)
+X_np, y_np = data.processing("adr", normalize=True)
 print(f"X_np's shape: {X_np.shape}")
 print(f"y_np's shape: {y_np.shape}")
 
