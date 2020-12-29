@@ -30,40 +30,16 @@ MONTHS = {
 }
 
 
-# def evaluation(pred, fname="data/test.csv"):
-#     test_df = pd.read_csv(fname)
-#     revenue = pd.DataFrame(pred, columns=["pred_revenue"])
-#     results = pd.merge([test_df, revenue], axis=1)
-#     results.to_csv("test_results.csv")
-
-#     groupby_date = results.groupby(
-#         ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
-#     )
-
-#     labels = []
-#     day_labels = {}
-#     for day, daily_revenue in groupby_date["pred_revenue"]:
-#         label = daily_revenue.sum() // 10000
-#         day_str = f"{int(day[0])}-{MONTHS[day[1]]:02d}-{int(day[2]):02d}"
-#         labels.append(label)
-#         day_labels[day_str] = label
-
-#     print(mean_absolute_error(labels_pred, labels_true))
-
-#     return labels
-
-
 # test classifiers
 data = Data(use_dummies=False)
-X_df, y_df = data.processing("revenue", normalize=False)
-X_df, y_df = data.processing("revenue", normalize=False)
+X_df, y_df = data.processing("revenue")
 X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
 print(X_np.shape)
 print(y_np.shape)
 
 
-eval_reg = RandomForestRegressor(verbose=True)
-# eval_reg = DecisionTreeRegressor()
+# eval_reg = RandomForestRegressor()
+eval_reg = DecisionTreeRegressor()
 train_X, test_X, train_y, test_y = train_test_split(
     X_np, y_np, test_size=0.25, random_state=1129
 )
@@ -71,10 +47,10 @@ eval_reg.fit(train_X, train_y)
 print("reg r2", eval_reg.score(test_X, test_y))
 print(regression_report(eval_reg.predict(test_X), test_y, train_X.shape[1]))
 
-
+#%%
 # # training with all data
-# reg = DecisionTreeRegressor()
-reg = RandomForestRegressor(verbose=True)
+reg = DecisionTreeRegressor()
+# reg = RandomForestRegressor()
 reg.fit(X_np, y_np)
 print(X_np.shape)
 

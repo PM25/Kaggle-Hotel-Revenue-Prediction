@@ -1,6 +1,7 @@
 #%%
 from utils import *
 
+from random import shuffle, seed
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_string_dtype, is_numeric_dtype
@@ -40,52 +41,63 @@ def get_columns_with_nan(df):
 
 # target is one of the ["is_canceled", "reservation_status", "adr"]
 class Data:
-    def __init__(self, fname="data/train.csv", use_dummies=False):
-        self.train_df = pd.read_csv(fname, index_col="ID")
-        self.label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
-        self.processed_df = self.add_features(self.train_df)
-        # self.processed_df = self.add_sklearn_prediction(self.processed_df)
-        print(f"Shape of Read Data: {self.train_df.shape}")
-        self.scaler = None
+    def __init__(self, fname="data/train.csv", use_dummies=False, normalize=False):
         self.y_cats = None
-        self.adr_regs = []
-        self.is_canceled_clf = []
-        self.column_transformer = None
-        self.use_dummies = use_dummies
+        self.scalers = None
         self.label_encoders = None
         self.onehot_encoders = None
+        self.normalize = normalize
+        self.use_dummies = use_dummies
+        self.fname = fname
+        # dataframes
+        self.train_df = pd.read_csv(fname, index_col="ID")
+        self.label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
+        self.clean_train_df = self.preprocessing(self.train_df, log=True)
+        self.processed_df = self.processing(log=True)
+        print(f"Shape of Read Data: {self.train_df.shape}")
 
     def __call__(self, fname):
         self.train_df = pd.read_csv(fname, index_col="ID")
-        self.processed_df = self.add_features(self.train_df)
-        # self.processed_df = self.add_sklearn_prediction(self.processed_df)
+        self.clean_train_df = self.preprocessing(self.train_df)
 
-    def processing_test_data(self, fname="data/test.csv"):
+    def preprocessing(self, df, log=False):
+        df = self.add_features(df, log=log)
+        # self.processed_df = self.add_sklearn_prediction(self.processed_df)
+        return df
+
+    def processing_test_data(self, fname="data/test.csv", log=False):
+        if log:
+            print(f"-" * 15)
+            print(f"Processing file: {fname}")
         test_df = pd.read_csv(fname, index_col="ID")
-        processed_df = self.add_features(test_df, test=True)
-        # processed_df = self.add_sklearn_prediction(processed_df, test=True)
-        X = self.postprocessing(processed_df)
-        return X
+        X_test_df = self.preprocessing(test_df, log=log)
+        X_test_df = self.postprocessing(X_test_df, log=log)
+        return X_test_df
 
     def get_y_cats(self):
         return self.y_cats
 
-    def add_features(self, train_df, test=False):
-        if not test:
-            train_df["revenue"] = (
-                train_df["stays_in_weekend_nights"] + train_df["stays_in_week_nights"]
-            ) * train_df["adr"]
+    def add_features(self, df, log=False):
+        added_columns = []
 
-            train_df.loc[train_df["is_canceled"] == 1, "revenue"] = 0
+        if {"adr", "is_canceled"}.issubset(df.columns):
+            df["revenue"] = (
+                df["stays_in_weekend_nights"] + df["stays_in_week_nights"]
+            ) * df["adr"]
+            df.loc[df["is_canceled"] == 1, "revenue"] = 0
+            added_columns.append("revenue")
 
-        train_df["net_cancelled"] = 0
-        train_df.loc[
-            train_df["previous_cancellations"]
-            > train_df["previous_bookings_not_canceled"],
-            "net_cancelled",
+        df["net_canceled"] = 0
+        df.loc[
+            df["previous_cancellations"] > df["previous_bookings_not_canceled"],
+            "net_canceled",
         ] = 1
+        added_columns.append("net_canceled")
 
-        return train_df
+        if log:
+            print(f"New added columns: {added_columns}")
+
+        return df
 
     def postprocessing(self, df, log=False):
         exclude_columns = [
@@ -99,90 +111,49 @@ class Data:
 
         df.arrival_date_month = df.arrival_date_month.map(MONTHS)
         df.children = df.children.fillna(0)
-        nan_cols = list(get_columns_with_nan(df))
+        nan_cols = get_columns_with_nan(df)
         if log:
-            print(f"Columns that contain NaN: {nan_cols}")
+            print(f"Columns that contain NaN (before):\n {nan_cols}")
 
         for col in nan_cols:
             df[col] = df[col].fillna("Null").astype(str)
 
         df = self.label_encoder(df)
+        if self.normalize:
+            df = self.use_scaler(df)
         if self.use_dummies:
             df = self.onehot_encoder(df)
 
         if log:
-            print(f"Columns that contain NaN: {list(get_columns_with_nan(df))}")
+            print(f"Columns that contain NaN (after):\n {get_columns_with_nan(df)}")
             print(f"Excluded columns: {exclude_columns}")
 
         return df
 
-    def processing(self, target="is_canceled", dropout=[], normalize=False):
-        processed_df = self.processed_df.copy()
+    def processing(self, target="is_canceled", dropout=[], log=False):
+        if log:
+            print(f"-" * 15)
+            print(f"Processing file: {self.fname}")
+        clean_df = self.clean_train_df.copy()
 
-        if is_numeric_dtype(processed_df[target]):
-            y_df = processed_df[target]
+        if is_numeric_dtype(clean_df[target]):
+            y_df = clean_df[target]
         else:
-            y_df = processed_df[target].astype("category")
+            y_df = clean_df[target].astype("category")
             self.y_cats = y_df.cat.categories
             y_df = y_df.cat.codes  # convert categories data to numeric codes
 
-        processed_df = processed_df.drop(dropout, axis=1, errors="ignore")
-        X_df = self.postprocessing(processed_df, log=True)
-
-        # TODO: make this function into class and store scaler for new data to use
-        if normalize:
-            if self.scaler is None:
-                self.scaler = MinMaxScaler(feature_range=(0, 1))
-                self.scaler.fit(X_df)
-            X_df = self.scaler.transform(X_df)
+        clean_df = clean_df.drop(dropout, axis=1, errors="ignore")
+        X_df = self.postprocessing(clean_df, log=log)
 
         return (X_df, y_df)
 
-    def processing_cnn(self):
-        train_df, _ = self.processing(None, use_dummies=False, test=True)
-        train_df_label = pd.read_csv("data/train_label.csv", index_col="arrival_date")
-
-        groupby_date = train_df.groupby(
-            ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
-        )
-
-        max_booking_a_day = max(
-            [len(value) for group, value in groupby_date.groups.items()]
-        )
-
-        X, y = [], []
-        for group, data in groupby_date.groups.items():
-            padding_sz = max_booking_a_day - len(data)
-            nfeatures = groupby_date.get_group(group).shape[1]
-            columns = groupby_date.get_group(group).columns
-            padding = pd.DataFrame(np.zeros((padding_sz, nfeatures)), columns=columns)
-            padding -= 1
-            processed_data = pd.concat([groupby_date.get_group(group), padding], axis=0)
-            date_str = f"{group[0]}-{group[1]:02d}-{group[2]:02d}"
-            label = train_df_label["label"][date_str]
-            X.append(processed_data.to_numpy())
-            y.append(label)
-
-        return (np.expand_dims(np.array(X), axis=1), np.array(y))
-
-    def processing_1d_cnn(self, previous=5):
-        train_df_X, train_df_label = self.processing_revenue(use_dummies=False)
-
-        X_list, y_list = [], []
-        for i in range(previous - 1, train_df_X.shape[0]):
-            X = train_df_X[i - previous + 1 : i + 1]
-            y = train_df_label[i]
-            X_list.append(X)
-            y_list.append(y)
-
-        return (np.array(X_list), np.array(y_list))
-
-    def add_sklearn_prediction(self, df, normalize=False, test=False):
+    def add_sklearn_prediction(self, df, test=False):
         processed_df = df.copy()
         out_processed_df = processed_df.copy()
 
         # add predicted is_canceled column
-        X_train, y_train = self.processing("is_canceled", normalize=normalize)
+        X_train, y_train = self.processing("is_canceled")
 
         for clf in [AdaBoostClassifier, RandomForestClassifier]:
             X, y = X_train.copy(), y_train.copy()
@@ -198,7 +169,7 @@ class Data:
             out_processed_df = pd.concat([out_processed_df, pd.DataFrame(pred)], axis=1)
 
         # add predicted adr column
-        X_train, y_train = self.processing("adr", normalize=normalize)
+        X_train, y_train = self.processing("adr")
 
         for reg in [BaggingRegressor, RandomForestRegressor]:
             X, y = X_train.copy(), y_train.copy()
@@ -217,12 +188,16 @@ class Data:
 
     def onehot_encoder(self, df, refit=False):
         if self.onehot_encoders != None and refit == False:
+            dummies_df = df.copy()
             for cname, encoder in self.onehot_encoders.items():
                 transformed_col = encoder.transform(df[[cname]])
                 transformed_cols_df = pd.DataFrame(
                     transformed_col, columns=encoder.get_feature_names()
                 )
-                df = pd.concat([df, transformed_cols_df], axis=1).drop([cname], axis=1)
+                dummies_df = pd.concat([dummies_df, transformed_cols_df], axis=1).drop(
+                    [cname], axis=1
+                )
+            df = dummies_df
         else:
             encoders = {}
             for cname in df.columns:
@@ -239,7 +214,6 @@ class Data:
                         [cname], axis=1
                     )
             self.onehot_encoders = encoders
-
         return df
 
     def label_encoder(self, df, refit=False):
@@ -248,8 +222,10 @@ class Data:
                 encoder_dict = dict(
                     zip(encoder.classes_, encoder.transform(encoder.classes_))
                 )
-                df[cname] = df[cname].apply(lambda x: encoder_dict.get(x, -1))
-                # df[cname] = encoder.transform(df[cname])
+                # handling previous unseen label (assign -1)
+                df[cname] = (
+                    df[cname].apply(lambda x: encoder_dict.get(x, -1)).astype(int)
+                )
         else:
             encoders = {}
             for cname in df.columns:
@@ -258,17 +234,80 @@ class Data:
                     df[cname] = encoders[cname].fit_transform(df[cname])
                     df[cname] = df[cname].astype("category")
             self.label_encoders = encoders
+        return df
+
+    def use_scaler(self, df, refit=False):
+        if self.scalers != None and refit == False:
+            for cname, scaler in self.scalers.items():
+                df[cname] = scaler.transform(df[[cname]])
+        else:
+            scalers = {}
+            for cname in df.columns:
+                if is_numeric_dtype(df[cname]):
+                    scalers[cname] = MinMaxScaler(feature_range=(0, 1))
+                    df[cname] = scalers[cname].fit_transform(df[[cname]])
+            self.scalers = scalers
 
         return df
+
+    def train_test_split_by_date(self, target="revenue", test_ratio=0.25, random=False):
+        seed(1129)
+        X_df, y_df = self.processing(target)
+        processed_df = pd.concat([X_df, y_df], axis=1)
+
+        date_df = processed_df.groupby(
+            ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
+        )
+
+        keys = [key for key in date_df.groups.keys()]
+        if random:
+            shuffle(keys)
+        train_amount = int(len(keys) * (1 - test_ratio))
+        train_keys = keys[:train_amount]
+        test_keys = keys[train_amount:]
+
+        train_idxs = []
+        for key in train_keys:
+            train_idxs += date_df.groups[key].tolist()
+        test_idxs = []
+        for key in test_keys:
+            test_idxs += date_df.groups[key].tolist()
+
+        if random:
+            shuffle(train_idxs)
+            shuffle(test_idxs)
+
+        train_df = processed_df.loc[train_idxs, :]
+        y_train_df = train_df[target]
+        X_train_df = train_df.drop([target], axis=1)
+        test_df = processed_df.loc[test_idxs, :]
+        y_test_df = test_df[target]
+        X_test_df = test_df.drop([target], axis=1)
+
+        return X_train_df, X_test_df, y_train_df, y_test_df
+
+    def predict_label(self, reg, df):
+        df["pred_revenue"] = reg.predict(df.to_numpy())
+
+        df_per_day = (
+            df.groupby(
+                ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
+            )
+            .sum()
+            .reset_index()
+            .rename(columns={"pred_revenue": "pred_revenue_per_day"})
+        )
+        df_per_day["pred_label"] = df_per_day["pred_revenue_per_day"] // 10000
+        df_per_day["arrival_date"] = df_per_day.apply(
+            lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
+            axis=1,
+        )
+
+        return df_per_day
 
 
 #%%
 if __name__ == "__main__":
-    data = Data(use_dummies=True)
-    # X, y = data.processing("adr", use_dummies=False)
-    # X, y = data.processing("revenue")
-    X1, y1 = data.processing("adr")
-    X2 = data.processing_test_data("data/train.csv")
-    print(np.array_equal(X1, X2))
-
+    data = Data(use_dummies=True, normalize=True)
+    X_df = data.processing_test_data()
 # %%
