@@ -285,7 +285,18 @@ class Data:
 
         return X_train_df, X_test_df, y_train_df, y_test_df
 
-    def predict_label(self, reg, df):
+    # target = label or revenue
+    def predict_clean(self, reg, df, target="label"):
+        df = self.predict(reg, df)
+        target_col = "pred_label" if target == "label" else "pred_revenue_per_day"
+        predict_df = (
+            df[["arrival_date", target_col]]
+            .reset_index(drop=True)
+            .set_index("arrival_date")
+        )
+        return predict_df
+
+    def predict(self, reg, df):
         df["pred_revenue"] = reg.predict(df.to_numpy())
 
         df_per_day = (
@@ -301,14 +312,7 @@ class Data:
             lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
             axis=1,
         )
-
-        predict_df = (
-            df_per_day[["arrival_date", "pred_label"]]
-            .reset_index(drop=True)
-            .set_index("arrival_date")
-        )
-
-        return predict_df
+        return df_per_day
 
 
 #%%

@@ -16,7 +16,7 @@ from sklearn.metrics import mean_absolute_error, classification_report
 
 #%%
 def evaluate(reg, X_df, label_df):
-    pred_df = data.predict_label(reg, X_df)
+    pred_df = data.predict_clean(reg, X_df)
 
     label_true_pred = []
     for date, row in pred_df.iterrows():
@@ -28,7 +28,9 @@ def evaluate(reg, X_df, label_df):
     label_pred = [pred for true, pred in label_true_pred]
     print(f"MAE: {mean_absolute_error(label_true, label_pred)}")
     print(classification_report(label_true, label_pred))
-    Visualization(label_true, label_pred).classification_report().confusion_matrix()
+    # Visualization(
+    #     label_true, label_pred
+    # ).classification_report().confusion_matrix().show()
 
 
 #%% fill label
@@ -59,28 +61,31 @@ print(f"y_train shape {y_train.shape}")
 print(f"y_test shape {y_test.shape}")
 
 #%%
-eval_reg = RandomForestRegressor()
-# eval_reg = DecisionTreeRegressor()
+# eval_reg = RandomForestRegressor(n_estimators=100, max_depth=40)
+# eval_reg = BaggingRegressor()
+eval_reg = DecisionTreeRegressor()
 eval_reg.fit(X_train, y_train)
-report = regression_report(eval_reg.predict(X_test), y_test, X_test.shape[1])
+report = regression_report(y_test, eval_reg.predict(X_test), X_test.shape[1])
 print("-" * 10, "regression report", "-" * 10)
 print(report)
 
 label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
 print("-" * 10, "evaluation", "-" * 10)
-evaluate(eval_reg, X_test_df, label_df)
+# evaluate(eval_reg, X_test_df, label_df)
+pred_df = data.predict(eval_reg, X_test_df)
 
 
 #%%
 # # training with all data
 X_df, y_df = data.processing("revenue")
-# reg = DecisionTreeRegressor()
-reg = RandomForestRegressor()
+reg = DecisionTreeRegressor()
+# reg = RandomForestRegressor()
+# reg = BaggingRegressor()
 reg.fit(X_df.to_numpy(), y_df.to_numpy())
 
 
 #%%
 # test_X_df = data.processing_test_data("data/train.csv")
 test_X_df = data.processing_test_data("data/test.csv")
-predict_df = data.predict_label(reg, test_X_df)
+predict_df = data.predict_clean(reg, test_X_df)
 fill_label(predict_df, "data/test_nolabel.csv")

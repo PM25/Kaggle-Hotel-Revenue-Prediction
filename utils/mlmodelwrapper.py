@@ -7,6 +7,8 @@ from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
 # import sklearn classification models
+from sklearn.utils import all_estimators
+
 from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -16,9 +18,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
-
-from sklearn.utils import all_estimators
-from sklearn.model_selection import train_test_split
 
 
 # TODO: use different hyperparameters according to data or try out a few settings and find best of it.
