@@ -250,7 +250,7 @@ class Data:
 
         return df
 
-    def train_test_split_by_date(self, target="revenue", test_ratio=0.25, random=False):
+    def train_test_split_by_date(self, target="revenue", test_ratio=0.25, random=True):
         seed(1129)
         X_df, y_df = self.processing(target)
         processed_df = pd.concat([X_df, y_df], axis=1)
@@ -260,8 +260,7 @@ class Data:
         )
 
         keys = [key for key in date_df.groups.keys()]
-        if random:
-            shuffle(keys)
+        # shuffle(keys)
         train_amount = int(len(keys) * (1 - test_ratio))
         train_keys = keys[:train_amount]
         test_keys = keys[train_amount:]
@@ -303,7 +302,13 @@ class Data:
             axis=1,
         )
 
-        return df_per_day
+        predict_df = (
+            df_per_day[["arrival_date", "pred_label"]]
+            .reset_index(drop=True)
+            .set_index("arrival_date")
+        )
+
+        return predict_df
 
 
 #%%

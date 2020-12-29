@@ -19,8 +19,7 @@ def evaluate(reg, X_df, label_df):
     pred_df = data.predict_label(reg, X_df)
 
     label_true_pred = []
-    for idx, row in pred_df.iterrows():
-        date = row["arrival_date"]
+    for date, row in pred_df.iterrows():
         label_true = label_df.loc[date, "label"]
         label_pred = row["pred_label"]
         label_true_pred.append((label_true, label_pred))
@@ -40,13 +39,13 @@ def fill_label(predict_df, fname="data/test_nolabel.csv"):
     for idx, subdf in predict_df.iterrows():
         label_df.loc[idx, "label"] = subdf["pred_label"]
 
-    label_df.to_csv("result.csv")
+    label_df.to_csv("label_pred.csv")
 
 
 # test classifiers
 data = Data(use_dummies=False, normalize=False)
 X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date(
-    "revenue", test_ratio=0.2
+    "revenue", test_ratio=0.3
 )
 X_train, X_test, y_train, y_test = (
     X_train_df.to_numpy(),
@@ -60,8 +59,8 @@ print(f"y_train shape {y_train.shape}")
 print(f"y_test shape {y_test.shape}")
 
 #%%
-# eval_reg = RandomForestRegressor()
-eval_reg = DecisionTreeRegressor()
+eval_reg = RandomForestRegressor()
+# eval_reg = DecisionTreeRegressor()
 eval_reg.fit(X_train, y_train)
 report = regression_report(eval_reg.predict(X_test), y_test, X_test.shape[1])
 print("-" * 10, "regression report", "-" * 10)
@@ -75,8 +74,8 @@ evaluate(eval_reg, X_test_df, label_df)
 #%%
 # # training with all data
 X_df, y_df = data.processing("revenue")
-reg = DecisionTreeRegressor()
-# reg = RandomForestRegressor()
+# reg = DecisionTreeRegressor()
+reg = RandomForestRegressor()
 reg.fit(X_df.to_numpy(), y_df.to_numpy())
 
 
@@ -84,14 +83,4 @@ reg.fit(X_df.to_numpy(), y_df.to_numpy())
 # test_X_df = data.processing_test_data("data/train.csv")
 test_X_df = data.processing_test_data("data/test.csv")
 predict_df = data.predict_label(reg, test_X_df)
-
-#%%
-predict_df = (
-    predict_df[["arrival_date", "pred_label"]]
-    .reset_index(drop=True)
-    .set_index("arrival_date")
-)
-#%%
 fill_label(predict_df, "data/test_nolabel.csv")
-
-# %%
