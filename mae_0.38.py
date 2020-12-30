@@ -4,7 +4,8 @@ from data_processing import Data
 from utils.metrics import regression_report
 
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.experimental import enable_hist_gradient_boosting
+from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, classification_report
 
 #%%
@@ -54,31 +55,23 @@ print(f"y_train shape {y_train.shape}")
 print(f"y_test shape {y_test.shape}")
 
 #%% evaluate performance with training data
-print("-" * 3, "training with training data", "-" * 3)
-eval_reg = RandomForestRegressor(n_estimators=100, max_depth=40)
+eval_reg = HistGradientBoostingRegressor()
 eval_reg.fit(X_train, y_train)
 report = regression_report(y_test, eval_reg.predict(X_test), X_test.shape[1])
-print("*train complete")
-
-#%%
 print("-" * 10, "regression report", "-" * 10)
 print(report)
 
-#%%
-print("-" * 10, "evaluation", "-" * 10)
 label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
+print("-" * 10, "evaluation", "-" * 10)
 evaluate(eval_reg, X_test_df, label_df)
 
 #%% training with all data
-print("-" * 3, "training with all data", "-" * 3)
 X_df, y_df = data.processing(["revenue"])
-reg = RandomForestRegressor(n_estimators=100, max_depth=40)
+reg = HistGradientBoostingRegressor()
 reg.fit(X_df.to_numpy(), y_df["revenue"].to_numpy())
-print("*train complete")
+
 
 #%% fill predict label to csv
-print("-" * 3, "fill label to csv", "-" * 3)
 test_X_df = data.processing_test_data("data/test.csv")
 predict_df = data.predict(reg, test_X_df)
 fill_label(predict_df, "data/test_nolabel.csv")
-print("*save complete")
