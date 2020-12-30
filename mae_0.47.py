@@ -48,10 +48,8 @@ X_train, X_test, y_train, y_test = (
     y_train_df["revenue"].to_numpy(),
     y_test_df["revenue"].to_numpy(),
 )
-print(f"X_train shape {X_train.shape}")
-print(f"X_test shape {X_test.shape}")
-print(f"y_train shape {y_train.shape}")
-print(f"y_test shape {y_test.shape}")
+print(f"X_train shape {X_train.shape}, y_train shape {y_train.shape}")
+print(f"X_test shape {X_test.shape}, y_test shape {y_test.shape}")
 
 #%% evaluate performance with training data
 print("-" * 3, "training with training data", "-" * 3)

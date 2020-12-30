@@ -4,6 +4,7 @@ from utils.metrics import regression_report
 
 import numpy as np
 import pandas as pd
+from datetime import datetime
 from data_processing import Data
 from sklearn.model_selection import train_test_split
 from sklearn.experimental import enable_hist_gradient_boosting
@@ -22,6 +23,36 @@ from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.linear_model import LinearRegression, BayesianRidge, Lars, HuberRegressor
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from sklearn.metrics import mean_absolute_error, classification_report
+
+is_canceled_clfs = [
+    # (
+    #     "RandomForestClassifier",
+    #     RandomForestClassifier(n_estimators=100, max_depth=40),
+    # ),
+    ("BaggingClassifier", BaggingClassifier()),
+    ("KNeighborsClassifier", KNeighborsClassifier()),
+    # ("MLPClassifier", MLPClassifier(max_iter=1000, early_stopping=True)),
+    # (
+    #     "CalibratedClassifierCV",
+    #     CalibratedClassifierCV(base_estimator=LinearSVC(max_iter=10000)),
+    # ),
+]
+
+adr_regs = [
+    # (
+    #     "RandomForestRegressor",
+    #     RandomForestRegressor(n_estimators=100, max_depth=40),
+    # ),
+    ("BaggingRegressor", BaggingRegressor()),
+    ("HistGradientBoostingRegressor", HistGradientBoostingRegressor()),
+    # ("MLPRegressor", MLPRegressor(max_iter=1000, early_stopping=True)),
+    # ("LinearRegression", LinearRegression()),
+    # ("BayesianRidge", BayesianRidge()),
+    # ("KNeighborsRegressor", KNeighborsRegressor()),
+    # ("Lars", Lars()),
+    # ("HuberRegressor", HuberRegressor(max_iter=10000)),
+]
+
 
 #%%
 def get_true_pred_labels(reg, X_df, label_df, target):
@@ -68,12 +99,14 @@ def evaluate_by_label2(pred_label_df, true_label_df, target="label"):
 
     label_true = [true for true, pred in true_pred_labels]
     label_pred = [pred for true, pred in true_pred_labels]
-    print(f"MAE: {mean_absolute_error(label_true, label_pred)}")
+    report = []
+    report.append(f"MAE: {mean_absolute_error(label_true, label_pred)}")
     if target == "label":
-        print(classification_report(label_true, label_pred))
+        report.append(classification_report(label_true, label_pred))
         Visualization(
             label_true, label_pred
         ).classification_report().confusion_matrix().show()
+    return "\n".join(report)
 
 
 #%% fill label
@@ -109,34 +142,8 @@ def append_pred(models, df):
 
 
 def train_w_reg_clf(X1_df, X2_df, y1_df, y2_df):
-    clfs = [
-        (
-            "RandomForestClassifier",
-            RandomForestClassifier(n_estimators=100, max_depth=40),
-        ),
-        ("BaggingClassifier", BaggingClassifier()),
-        ("KNeighborsClassifier", KNeighborsClassifier()),
-        ("MLPClassifier", MLPClassifier(max_iter=1000, early_stopping=True)),
-        # (
-        #     "CalibratedClassifierCV",
-        #     CalibratedClassifierCV(base_estimator=LinearSVC(max_iter=10000)),
-        # ),
-    ]
-
-    regs = [
-        (
-            "RandomForestRegressor",
-            RandomForestRegressor(n_estimators=100, max_depth=40),
-        ),
-        ("BaggingRegressor", BaggingRegressor()),
-        ("HistGradientBoostingRegressor", HistGradientBoostingRegressor()),
-        # ("MLPRegressor", MLPRegressor(max_iter=1000, early_stopping=True)),
-        # ("LinearRegression", LinearRegression()),
-        # ("BayesianRidge", BayesianRidge()),
-        # ("KNeighborsRegressor", KNeighborsRegressor()),
-        # ("Lars", Lars()),
-        # ("HuberRegressor", HuberRegressor(max_iter=10000)),
-    ]
+    clfs = is_canceled_clfs
+    regs = adr_regs
 
     print("-" * 5, f"training classifier", "-" * 5)
     train_clfs = []
@@ -222,20 +229,22 @@ def main(regressor, X_train_df, X_test_df, y_train_df, y_test_df, nsplit=2):
     revenue_pred = np.sum(revenue_preds, axis=0) / len(revenue_preds)
 
     # print report
-    print("-" * 5, "revenue_per_order evaluation", "-" * 5)
+    report = []
+    report.append("[ revenue_per_order evaluation ]")
     y_test = y_test_df["revenue"].to_numpy()
-    report = regression_report(y_test, revenue_pred, X_test_df.shape[1])
-    print(report)
+    reg_report = regression_report(y_test, revenue_pred, X_test_df.shape[1])
+    report.append(reg_report)
 
     pred_df = X_test_df.copy()
     pred_df["pred_revenue"] = revenue_pred
     pred_label_df = data.to_label(pred_df)
     true_label_df = pd.read_csv("data/revenue_per_day.csv", index_col="arrival_date")
 
-    print("-" * 5, "label evaluation", "-" * 5)
-    evaluate_by_label2(pred_label_df, true_label_df, "label")
-    print("-" * 5, "revenue_per_day evaluation", "-" * 5)
-    evaluate_by_label2(pred_label_df, true_label_df, "revenue")
+    report.append("[ label evaluation ]")
+    report.append(evaluate_by_label2(pred_label_df, true_label_df, "label"))
+    report.append("[ revenue_per_day evaluation ]")
+    report.append(evaluate_by_label2(pred_label_df, true_label_df, "revenue"))
+    return "\n".join(report) + "\n"
 
 
 #%% data
@@ -246,23 +255,25 @@ X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date(
 print(f"X_train shape {X_train_df.shape}, y_train shape {y_train_df.shape}")
 print(f"X_test shape {X_test_df.shape}, y_test shape {y_test_df.shape}")
 
-main(
-    HistGradientBoostingRegressor,
-    X_train_df,
-    X_test_df,
-    y_train_df,
-    y_test_df,
-    nsplit=5,
-)
-
-# for i in range(2, 20, 3):
-#     print(f"nsplit = {i}")
-#     main(
-#         HistGradientBoostingRegressor,
-#         X_train_df,
-#         X_test_df,
-#         y_train_df,
-#         y_test_df,
-#         nsplit=i,
-#     )
+for i in range(2, 3, 3):
+    print(f"nsplit = {i}")
+    report = main(
+        HistGradientBoostingRegressor,
+        X_train_df,
+        X_test_df,
+        y_train_df,
+        y_test_df,
+        nsplit=i,
+    )
+    print(report)
+    print(f"*Save result to Ensemble_w_Pred_Report.txt")
+    with open(f"Ensemble_w_Pred_Report.txt", "a") as ofile:
+        ofile.write(f"nsplit={i}\n")
+        ofile.write(
+            f"is_canceled classifier: {[name for name, _ in is_canceled_clfs]}\n"
+        )
+        ofile.write(f"adr regressor: {[name for name, _ in adr_regs]}]\n")
+        ofile.write(f"finished time: {datetime.now()}\n\n")
+        ofile.write(report)
+        ofile.write("-" * 10 + " End " + "-" * 10 + "\n")
 

@@ -19,6 +19,9 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 
+# max thread running at the same time
+work_slot = threading.BoundedSemaphore(5)
+
 
 # TODO: use different hyperparameters according to data or try out a few settings and find best of it.
 # models
@@ -98,6 +101,7 @@ class TrainModelThread(threading.Thread):
         name=None,
         save=True,
     ):
+        work_slot.acquire()
         threading.Thread.__init__(self)
         self.train_X = X_train
         self.train_y = y_train
@@ -127,4 +131,5 @@ class TrainModelThread(threading.Thread):
                 ofile.write(report)
                 ofile.write("-" * 20 + "\n")
         print("-" * 20)
+        work_slot.release()
 

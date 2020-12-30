@@ -49,13 +49,11 @@ X_train, X_test, y_train, y_test = (
     y_train_df["revenue"].to_numpy(),
     y_test_df["revenue"].to_numpy(),
 )
-print(f"X_train shape {X_train.shape}")
-print(f"X_test shape {X_test.shape}")
-print(f"y_train shape {y_train.shape}")
-print(f"y_test shape {y_test.shape}")
+print(f"X_train shape {X_train.shape}, y_train shape {y_train.shape}")
+print(f"X_test shape {X_test.shape}, y_test shape {y_test.shape}")
 
 #%% evaluate performance with training data
-eval_reg = HistGradientBoostingRegressor()
+eval_reg = HistGradientBoostingRegressor(random_state=1129)
 eval_reg.fit(X_train, y_train)
 report = regression_report(y_test, eval_reg.predict(X_test), X_test.shape[1])
 print("-" * 10, "regression report", "-" * 10)
@@ -67,7 +65,7 @@ evaluate(eval_reg, X_test_df, label_df)
 
 #%% training with all data
 X_df, y_df = data.processing(["revenue"])
-reg = HistGradientBoostingRegressor()
+reg = HistGradientBoostingRegressor(random_state=1129)
 reg.fit(X_df.to_numpy(), y_df["revenue"].to_numpy())
 
 
