@@ -4,19 +4,12 @@ from utils.metrics import regression_report
 
 import pandas as pd
 from data_processing import Data
-from sklearn.experimental import enable_hist_gradient_boosting
-from sklearn.ensemble import (
-    BaggingRegressor,
-    BaggingClassifier,
-    RandomForestRegressor,
-    HistGradientBoostingRegressor,
-)
-from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, classification_report
 
 #%%
 def evaluate(reg, X_df, label_df):
-    pred_df = data.predict_clean(reg, X_df)
+    pred_df = data.predict(reg, X_df)
 
     label_true_pred = []
     for date, row in pred_df.iterrows():
@@ -44,48 +37,48 @@ def fill_label(predict_df, fname="data/test_nolabel.csv"):
     label_df.to_csv("label_pred.csv")
 
 
-# test classifiers
+# data
 data = Data(use_dummies=False, normalize=False)
 X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date(
-    "revenue", test_ratio=0.3
+    ["revenue"], test_ratio=0.3
 )
 X_train, X_test, y_train, y_test = (
     X_train_df.to_numpy(),
     X_test_df.to_numpy(),
-    y_train_df.to_numpy(),
-    y_test_df.to_numpy(),
+    y_train_df["revenue"].to_numpy(),
+    y_test_df["revenue"].to_numpy(),
 )
 print(f"X_train shape {X_train.shape}")
-print(f"X_test shape {X_train.shape}")
+print(f"X_test shape {X_test.shape}")
 print(f"y_train shape {y_train.shape}")
 print(f"y_test shape {y_test.shape}")
 
-#%%
-# eval_reg = RandomForestRegressor(n_estimators=100, max_depth=40)
-# eval_reg = BaggingRegressor()
-eval_reg = DecisionTreeRegressor()
+#%% evaluate performance with training data
+print("-" * 3, "training with training data", "-" * 3)
+eval_reg = RandomForestRegressor(n_estimators=100, max_depth=40)
 eval_reg.fit(X_train, y_train)
 report = regression_report(y_test, eval_reg.predict(X_test), X_test.shape[1])
+print("*train complete")
+
+#%%
 print("-" * 10, "regression report", "-" * 10)
 print(report)
 
-label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
+#%%
 print("-" * 10, "evaluation", "-" * 10)
-# evaluate(eval_reg, X_test_df, label_df)
-pred_df = data.predict(eval_reg, X_test_df)
+label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
+evaluate(eval_reg, X_test_df, label_df)
 
+#%% training with all data
+print("-" * 3, "training with all data", "-" * 3)
+X_df, y_df = data.processing(["revenue"])
+reg = RandomForestRegressor(n_estimators=100, max_depth=40)
+reg.fit(X_df.to_numpy(), y_df["revenue"].to_numpy())
+print("*train complete")
 
-#%%
-# # training with all data
-X_df, y_df = data.processing("revenue")
-reg = DecisionTreeRegressor()
-# reg = RandomForestRegressor()
-# reg = BaggingRegressor()
-reg.fit(X_df.to_numpy(), y_df.to_numpy())
-
-
-#%%
-# test_X_df = data.processing_test_data("data/train.csv")
+#%% fill predict label to csv
+print("-" * 3, "fill label to csv", "-" * 3)
 test_X_df = data.processing_test_data("data/test.csv")
-predict_df = data.predict_clean(reg, test_X_df)
+predict_df = data.predict(reg, test_X_df)
 fill_label(predict_df, "data/test_nolabel.csv")
+print("*save complete")

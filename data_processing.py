@@ -42,7 +42,7 @@ def get_columns_with_nan(df):
 # target is one of the ["is_canceled", "reservation_status", "adr"]
 class Data:
     def __init__(self, fname="data/train.csv", use_dummies=False, normalize=False):
-        self.y_cats = None
+        self.y_cats = {}
         self.scalers = None
         self.label_encoders = None
         self.onehot_encoders = None
@@ -130,18 +130,22 @@ class Data:
 
         return df
 
-    def processing(self, target="is_canceled", dropout=[], log=False):
+    def processing(self, targets=["is_canceled"], dropout=[], log=False):
         if log:
             print(f"-" * 15)
             print(f"Processing file: {self.fname}")
         clean_df = self.clean_train_df.copy()
 
-        if is_numeric_dtype(clean_df[target]):
-            y_df = clean_df[target]
-        else:
-            y_df = clean_df[target].astype("category")
-            self.y_cats = y_df.cat.categories
-            y_df = y_df.cat.codes  # convert categories data to numeric codes
+        y_dfs = []
+        for target in targets:
+            if is_numeric_dtype(clean_df[target]):
+                y_df = clean_df[target]
+            else:
+                y_df = clean_df[target].astype("category")
+                self.y_cats[target] = y_df.cat.categories
+                y_df = y_df.cat.codes  # convert categories data to numeric codes
+            y_dfs.append(y_df)
+        y_df = pd.concat(y_dfs, axis=1)
 
         clean_df = clean_df.drop(dropout, axis=1, errors="ignore")
         X_df = self.postprocessing(clean_df, log=log)
@@ -153,7 +157,7 @@ class Data:
         out_processed_df = processed_df.copy()
 
         # add predicted is_canceled column
-        X_train, y_train = self.processing("is_canceled")
+        X_train, y_train = self.processing(["is_canceled"])
 
         for clf in [AdaBoostClassifier, RandomForestClassifier]:
             X, y = X_train.copy(), y_train.copy()
@@ -169,7 +173,7 @@ class Data:
             out_processed_df = pd.concat([out_processed_df, pd.DataFrame(pred)], axis=1)
 
         # add predicted adr column
-        X_train, y_train = self.processing("adr")
+        X_train, y_train = self.processing(["adr"])
 
         for reg in [BaggingRegressor, RandomForestRegressor]:
             X, y = X_train.copy(), y_train.copy()
@@ -250,9 +254,11 @@ class Data:
 
         return df
 
-    def train_test_split_by_date(self, target="revenue", test_ratio=0.25, random=True):
+    def train_test_split_by_date(
+        self, targets=["revenue"], test_ratio=0.25, random=True
+    ):
         seed(1129)
-        X_df, y_df = self.processing(target)
+        X_df, y_df = self.processing(targets)
         processed_df = pd.concat([X_df, y_df], axis=1)
 
         date_df = processed_df.groupby(
@@ -277,29 +283,18 @@ class Data:
             shuffle(test_idxs)
 
         train_df = processed_df.loc[train_idxs, :]
-        y_train_df = train_df[target]
-        X_train_df = train_df.drop([target], axis=1)
+        y_train_df = train_df[targets]
+        X_train_df = train_df.drop(targets, axis=1)
         test_df = processed_df.loc[test_idxs, :]
-        y_test_df = test_df[target]
-        X_test_df = test_df.drop([target], axis=1)
+        y_test_df = test_df[targets]
+        X_test_df = test_df.drop(targets, axis=1)
 
         return X_train_df, X_test_df, y_train_df, y_test_df
 
-    # target = label or revenue
-    def predict_clean(self, reg, df, target="label"):
-        df = self.predict(reg, df)
-        target_col = "pred_label" if target == "label" else "pred_revenue_per_day"
-        predict_df = (
-            df[["arrival_date", target_col]]
-            .reset_index(drop=True)
-            .set_index("arrival_date")
-        )
-        return predict_df
-
-    def predict(self, reg, df):
+    def predict(self, reg, df, columns=["pred_label", "pred_revenue_per_day"]):
         df["pred_revenue"] = reg.predict(df.to_numpy())
 
-        df_per_day = (
+        day_df = (
             df.groupby(
                 ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
             )
@@ -307,16 +302,47 @@ class Data:
             .reset_index()
             .rename(columns={"pred_revenue": "pred_revenue_per_day"})
         )
-        df_per_day["pred_label"] = df_per_day["pred_revenue_per_day"] // 10000
-        df_per_day["arrival_date"] = df_per_day.apply(
+        day_df["pred_label"] = day_df["pred_revenue_per_day"] // 10000
+        day_df["arrival_date"] = day_df.apply(
             lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
             axis=1,
         )
-        return df_per_day
+        day_df = (
+            day_df[["arrival_date"] + columns]
+            .reset_index(drop=True)
+            .set_index("arrival_date")
+        )
+        return day_df
+
+    def to_label(self, df, columns=["pred_label", "pred_revenue_per_day"]):
+        df = (
+            df.groupby(
+                ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
+            )
+            .sum()
+            .reset_index()
+            .rename(columns={"pred_revenue": "pred_revenue_per_day"})
+        )
+        df["pred_label"] = df["pred_revenue_per_day"] // 10000
+        df["arrival_date"] = df.apply(
+            lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
+            axis=1,
+        )
+        df = (
+            df[["arrival_date"] + columns]
+            .reset_index(drop=True)
+            .set_index("arrival_date")
+        )
+        return df
 
 
 #%%
 if __name__ == "__main__":
     data = Data(use_dummies=True, normalize=True)
-    X_df = data.processing_test_data()
+    # X_df = data.processing_test_data()
+    # X, y = data.processing(["is_canceled", "adr"])
+    X_df, y_df = data.processing()
+    X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date()
+    assert len(y_train_df.shape[1]) == len(y_test_df.shape) == 1
+
 # %%
