@@ -8,22 +8,27 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, classification_report
 
 #%%
-def evaluate(reg, X_df, label_df):
-    pred_df = data.predict(reg, X_df)
+def evaluate_by_label(pred_label_df, true_label_df, target="label"):
+    true_pred_labels = []
+    for date, row in pred_label_df.iterrows():
+        if target == "label":
+            label_true = true_label_df.loc[date, "label"]
+            label_pred = row["pred_label"]
+        else:
+            label_true = true_label_df.loc[date, "revenuePerDay"]
+            label_pred = row["pred_revenue_per_day"]
+        true_pred_labels.append((label_true, label_pred))
 
-    label_true_pred = []
-    for date, row in pred_df.iterrows():
-        label_true = label_df.loc[date, "label"]
-        label_pred = row["pred_label"]
-        label_true_pred.append((label_true, label_pred))
-
-    label_true = [true for true, pred in label_true_pred]
-    label_pred = [pred for true, pred in label_true_pred]
-    print(f"MAE: {mean_absolute_error(label_true, label_pred)}")
-    print(classification_report(label_true, label_pred))
-    # Visualization(
-    #     label_true, label_pred
-    # ).classification_report().confusion_matrix().show()
+    label_true = [true for true, pred in true_pred_labels]
+    label_pred = [pred for true, pred in true_pred_labels]
+    report = []
+    report.append(f"MAE: {mean_absolute_error(label_true, label_pred)}")
+    if target == "label":
+        report.append(classification_report(label_true, label_pred))
+        Visualization(
+            label_true, label_pred
+        ).classification_report().confusion_matrix().show()
+    return "\n".join(report)
 
 
 #%% fill label
@@ -52,31 +57,28 @@ print(f"X_train shape {X_train.shape}, y_train shape {y_train.shape}")
 print(f"X_test shape {X_test.shape}, y_test shape {y_test.shape}")
 
 #%% evaluate performance with training data
-print("-" * 3, "training with training data", "-" * 3)
-eval_reg = RandomForestRegressor(n_estimators=100, max_depth=40)
+eval_reg = RandomForestRegressor(n_estimators=100, max_depth=40, random_state=1129)
 eval_reg.fit(X_train, y_train)
-report = regression_report(y_test, eval_reg.predict(X_test), X_test.shape[1])
-print("*train complete")
 
-#%%
 print("-" * 10, "regression report", "-" * 10)
+report = regression_report(y_test, eval_reg.predict(X_test), X_test.shape[1])
 print(report)
 
-#%%
-print("-" * 10, "evaluation", "-" * 10)
-label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
-evaluate(eval_reg, X_test_df, label_df)
+print("-" * 10, "evaluation of label", "-" * 10)
+label_df = pd.read_csv("data/revenue_per_day.csv", index_col="arrival_date")
+pred_label_df = data.predict(eval_reg, X_test_df)
+report_label = evaluate_by_label(pred_label_df, label_df, target="label")
+report_revenue = evaluate_by_label(pred_label_df, label_df, target="revenue")
+print(report_label)
+print(report_revenue)
 
 #%% training with all data
-print("-" * 3, "training with all data", "-" * 3)
 X_df, y_df = data.processing(["revenue"])
-reg = RandomForestRegressor(n_estimators=100, max_depth=40)
+reg = RandomForestRegressor(n_estimators=100, max_depth=40, random_state=1129)
 reg.fit(X_df.to_numpy(), y_df["revenue"].to_numpy())
-print("*train complete")
+
 
 #%% fill predict label to csv
-print("-" * 3, "fill label to csv", "-" * 3)
 test_X_df = data.processing_test_data("data/test.csv")
 predict_df = data.predict(reg, test_X_df)
 fill_label(predict_df, "data/test_nolabel.csv")
-print("*save complete")
