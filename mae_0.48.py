@@ -66,7 +66,7 @@ print(report)
 
 print("-" * 10, "evaluation of label", "-" * 10)
 label_df = pd.read_csv("data/revenue_per_day.csv", index_col="arrival_date")
-pred_label_df = data.predict(eval_reg, X_test_df)
+pred_label_df = data.predict_label(eval_reg, X_test_df)
 report_label = evaluate_by_label(pred_label_df, label_df, target="label")
 report_revenue = evaluate_by_label(pred_label_df, label_df, target="revenue")
 print(report_label)
@@ -80,5 +80,5 @@ reg.fit(X_df.to_numpy(), y_df["revenue"].to_numpy())
 
 #%% fill predict label to csv
 test_X_df = data.processing_test_data("data/test.csv")
-predict_df = data.predict(reg, test_X_df)
+predict_df = data.predict_label(reg, test_X_df)
 fill_label(predict_df, "data/test_nolabel.csv")
