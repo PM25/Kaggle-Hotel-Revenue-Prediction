@@ -81,12 +81,19 @@ class Data:
         added_columns = []
 
         if {"adr", "is_canceled"}.issubset(df.columns):
+            # revenue
             df["revenue"] = (
                 df["stays_in_weekend_nights"] + df["stays_in_week_nights"]
             ) * df["adr"]
             df.loc[df["is_canceled"] == 1, "revenue"] = 0
             added_columns.append("revenue")
 
+            # actual adr (is_canceled adr = 0)
+            df["actual_adr"] = df["adr"]
+            df.loc[df["is_canceled"] == 1, "actual_adr"] = 0
+            added_columns.append("actual_adr")
+
+        # net canceled
         df["net_canceled"] = 0
         df.loc[
             df["previous_cancellations"] > df["previous_bookings_not_canceled"],
@@ -106,6 +113,7 @@ class Data:
             "reservation_status",
             "reservation_status_date",
             "revenue",
+            "actual_adr",
         ]
         df = df.drop(exclude_columns, axis=1, errors="ignore")
 
@@ -291,30 +299,23 @@ class Data:
 
         return X_train_df, X_test_df, y_train_df, y_test_df
 
-    def predict(self, reg, df, columns=["pred_label", "pred_revenue_per_day"]):
-        df["pred_revenue"] = reg.predict(df.to_numpy())
+    def predict_label(
+        self, reg, df, reg_out="revenue", columns=["pred_label", "pred_revenue_per_day"]
+    ):
+        df = df.copy()
+        if reg_out == "revenue":
+            df["pred_revenue"] = reg.predict(df.to_numpy())
+        elif reg_out == "adr":
+            df["pred_adr"] = reg.predict(df.to_numpy())
+            df["pred_revenue"] = (
+                df["stays_in_weekend_nights"] + df["stays_in_week_nights"]
+            ) * df["pred_adr"]
 
-        day_df = (
-            df.groupby(
-                ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
-            )
-            .sum()
-            .reset_index()
-            .rename(columns={"pred_revenue": "pred_revenue_per_day"})
-        )
-        day_df["pred_label"] = day_df["pred_revenue_per_day"] // 10000
-        day_df["arrival_date"] = day_df.apply(
-            lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
-            axis=1,
-        )
-        day_df = (
-            day_df[["arrival_date"] + columns]
-            .reset_index(drop=True)
-            .set_index("arrival_date")
-        )
-        return day_df
+        df = self.to_label(df, columns=columns)
+        return df
 
     def to_label(self, df, columns=["pred_label", "pred_revenue_per_day"]):
+        df = df.copy()
         df = (
             df.groupby(
                 ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
@@ -324,6 +325,29 @@ class Data:
             .rename(columns={"pred_revenue": "pred_revenue_per_day"})
         )
         df["pred_label"] = df["pred_revenue_per_day"] // 10000
+        df["arrival_date"] = df.apply(
+            lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
+            axis=1,
+        )
+        df = (
+            df[["arrival_date"] + columns]
+            .reset_index(drop=True)
+            .set_index("arrival_date")
+        )
+        return df
+
+    # only work when setting normalize & use_dummies to False
+    def get_true_label(self, columns=["adr", "label", "revenue"]):
+        X_df, y_df = self.processing(["adr", "is_canceled", "revenue"])
+        df = pd.concat([X_df, y_df], axis=1)
+        df = (
+            df.groupby(
+                ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
+            )
+            .sum()
+            .reset_index()
+        )
+        df["label"] = df["revenue"] // 10000
         df["arrival_date"] = df.apply(
             lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
             axis=1,

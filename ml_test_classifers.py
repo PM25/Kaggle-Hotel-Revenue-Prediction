@@ -4,19 +4,17 @@ from data_processing import Data
 
 # start from here!
 if __name__ == "__main__":
+    data = Data(use_dummies=False, normalize=False)
     # test classifiers
-    data = Data()
-    X_df, y_df = data.processing("is_canceled", use_dummies=False, normalize=False)
-    mlmodelwrapper = MLModelWrapper(X_np, y_np)
+    X_df, y_df = data.processing(["is_canceled"])
+    mlmodelwrapper = MLModelWrapper(X_df.to_numpy(), y_df.to_numpy())
     mlmodelwrapper.quick_test("classifier")
 
     # test regressors
-    data = Data()
-    X_df, y_df = data.processing("adr", use_dummies=False, normalize=False)
-    mlmodelwrapper = MLModelWrapper(X_np, y_np)
+    X_df, y_df = data.processing(["adr"])
+    mlmodelwrapper = MLModelWrapper(X_df.to_numpy(), y_df.to_numpy())
     mlmodelwrapper.quick_test("regressor")
 
-    data = Data()
-    X_np, y_np = data.processing("revenue", use_dummies=False, normalize=False)
-    mlmodelwrapper = MLModelWrapper(X_np, y_np)
+    X_df, y_df = data.processing(["revenue"])
+    mlmodelwrapper = MLModelWrapper(X_df.to_numpy(), y_df.to_numpy())
     mlmodelwrapper.quick_test("regressor")

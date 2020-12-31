@@ -67,9 +67,12 @@ print(report)
 print("-" * 10, "evaluation of label", "-" * 10)
 label_df = pd.read_csv("data/revenue_per_day.csv", index_col="arrival_date")
 pred_label_df = data.predict_label(eval_reg, X_test_df)
+
+print("[ label evaluation ]")
 report_label = evaluate_by_label(pred_label_df, label_df, target="label")
-report_revenue = evaluate_by_label(pred_label_df, label_df, target="revenue")
 print(report_label)
+print("[ revenue_per_day evaluation ]")
+report_revenue = evaluate_by_label(pred_label_df, label_df, target="revenue")
 print(report_revenue)
 
 #%% training with all data

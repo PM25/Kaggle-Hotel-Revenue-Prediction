@@ -84,5 +84,5 @@ reg.fit(X_df.to_numpy(), y_df["actual_adr"].to_numpy())
 
 #%% fill predict label to csv
 test_X_df = data.processing_test_data("data/test.csv")
-predict_df = data.predict_label(reg, test_X_df)
-fill_label(predict_df, "data/test_nolabel.csv")
+pred_label_df = data.predict_label(reg, test_X_df, reg_out="adr")
+fill_label(pred_label_df, "data/test_nolabel.csv")
