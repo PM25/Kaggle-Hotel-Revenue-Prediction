@@ -13,8 +13,8 @@ from sklearn.ensemble import (
     RandomForestRegressor,
 )
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, classification_report
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, LabelBinarizer
-from sklearn.compose import ColumnTransformer
 
 MONTHS = {
     "January": 1,
@@ -39,6 +39,38 @@ def get_columns_with_nan(df):
     return columns_with_nan
 
 
+def evaluate_by_label(pred_label_df, true_label_df, target="label"):
+    true_preds = []
+    for date, row in pred_label_df.iterrows():
+        if target == "label":
+            true = true_label_df.loc[date, "label"]
+            pred = row["pred_label"]
+        else:
+            true = true_label_df.loc[date, "revenue"]
+            pred = row["pred_revenue"]
+        true_preds.append((true, pred))
+
+    true = [true for true, pred in true_preds]
+    pred = [pred for true, pred in true_preds]
+    report = []
+    report.append(f"MAE: {mean_absolute_error(true, pred)}")
+    if target == "label":
+        report.append(classification_report(true, pred))
+        Visualization(true, pred).classification_report().confusion_matrix().show()
+    return "\n".join(report)
+
+
+#%% fill label
+def fill_label(predict_df, fname="data/test_nolabel.csv"):
+    label_df = pd.read_csv(fname, index_col="arrival_date")
+
+    label_df["label"] = 0
+    for idx, subdf in predict_df.iterrows():
+        label_df.loc[idx, "label"] = subdf["pred_label"]
+
+    label_df.to_csv("label_pred.csv")
+
+
 # target is one of the ["is_canceled", "reservation_status", "adr"]
 class Data:
     def __init__(self, fname="data/train.csv", use_dummies=False, normalize=False):
@@ -51,10 +83,10 @@ class Data:
         self.fname = fname
         # dataframes
         self.train_df = pd.read_csv(fname, index_col="ID")
+        print(f"Shape of Read Data: {self.train_df.shape}")
         self.label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
         self.clean_train_df = self.preprocessing(self.train_df, log=True)
         self.processed_df = self.processing(log=True)
-        print(f"Shape of Read Data: {self.train_df.shape}")
 
     def __call__(self, fname):
         self.train_df = pd.read_csv(fname, index_col="ID")
@@ -62,7 +94,6 @@ class Data:
 
     def preprocessing(self, df, log=False):
         df = self.add_features(df, log=log)
-        # self.processed_df = self.add_sklearn_prediction(self.processed_df)
         return df
 
     def processing_test_data(self, fname="data/test.csv", log=False):
@@ -135,6 +166,7 @@ class Data:
         if log:
             print(f"Columns that contain NaN (after):\n {get_columns_with_nan(df)}")
             print(f"Excluded columns: {exclude_columns}")
+            print(f"Processed DataFrame shape: {df.shape}")
 
         return df
 
@@ -300,7 +332,7 @@ class Data:
         return X_train_df, X_test_df, y_train_df, y_test_df
 
     def predict_label(
-        self, reg, df, reg_out="revenue", columns=["pred_label", "pred_revenue_per_day"]
+        self, reg, df, reg_out="revenue", columns=["pred_label", "pred_revenue"]
     ):
         df = df.copy()
         if reg_out == "revenue":
@@ -314,7 +346,7 @@ class Data:
         df = self.to_label(df, columns=columns)
         return df
 
-    def to_label(self, df, columns=["pred_label", "pred_revenue_per_day"]):
+    def to_label(self, df, columns=["pred_revenue", "pred_label"]):
         df = df.copy()
         df = (
             df.groupby(
@@ -322,13 +354,17 @@ class Data:
             )
             .sum()
             .reset_index()
-            .rename(columns={"pred_revenue": "pred_revenue_per_day"})
         )
-        df["pred_label"] = df["pred_revenue_per_day"] // 10000
+        if "pred_revenue" in df.columns:
+            df["pred_label"] = df["pred_revenue"] // 10000
+        if "revenue" in df.columns:
+            df["label"] = df["revenue"] // 10000
+
         df["arrival_date"] = df.apply(
             lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
             axis=1,
         )
+
         df = (
             df[["arrival_date"] + columns]
             .reset_index(drop=True)
@@ -338,25 +374,9 @@ class Data:
 
     # only work when setting normalize & use_dummies to False
     def get_true_label(self, columns=["adr", "label", "revenue"]):
-        X_df, y_df = self.processing(["adr", "is_canceled", "revenue"])
+        X_df, y_df = self.processing(["adr", "is_canceled", "revenue", "actual_adr"])
         df = pd.concat([X_df, y_df], axis=1)
-        df = (
-            df.groupby(
-                ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
-            )
-            .sum()
-            .reset_index()
-        )
-        df["label"] = df["revenue"] // 10000
-        df["arrival_date"] = df.apply(
-            lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
-            axis=1,
-        )
-        df = (
-            df[["arrival_date"] + columns]
-            .reset_index(drop=True)
-            .set_index("arrival_date")
-        )
+        df = self.to_label(df, columns=columns)
         return df
 
 
