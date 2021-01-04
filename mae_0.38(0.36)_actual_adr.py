@@ -52,3 +52,5 @@ if __name__ == "__main__":
     test_X_df = data.processing_test_data("data/test.csv")
     pred_label_df = data.predict_label(reg, test_X_df, reg_out="adr")
     fill_label(pred_label_df, "data/test_nolabel.csv")
+
+#%%

@@ -1,6 +1,7 @@
 #%%
 from utils import *
 
+import datetime
 from random import shuffle, seed
 import numpy as np
 import pandas as pd
@@ -93,6 +94,8 @@ class Data:
         self.clean_train_df = self.preprocessing(self.train_df)
 
     def preprocessing(self, df, log=False):
+        df = df.copy()
+        df.arrival_date_month = df.arrival_date_month.map(MONTHS)
         df = self.add_features(df, log=log)
         return df
 
@@ -108,7 +111,8 @@ class Data:
     def get_y_cats(self):
         return self.y_cats
 
-    def add_features(self, df, log=False):
+    def add_features(self, df, features=[], log=False):
+        df = df.copy()
         added_columns = []
 
         if {"adr", "is_canceled"}.issubset(df.columns):
@@ -132,12 +136,17 @@ class Data:
         ] = 1
         added_columns.append("net_canceled")
 
+        if "orders_in_the_same_day" in features:
+            df = self.add_orders_in_same_day(df)
+            added_columns.append("orders_in_the_same_day")
+
         if log:
             print(f"New added columns: {added_columns}")
 
         return df
 
     def postprocessing(self, df, log=False):
+        df = df.copy()
         exclude_columns = [
             "is_canceled",
             "adr",
@@ -148,7 +157,6 @@ class Data:
         ]
         df = df.drop(exclude_columns, axis=1, errors="ignore")
 
-        df.arrival_date_month = df.arrival_date_month.map(MONTHS)
         df.children = df.children.fillna(0)
         nan_cols = get_columns_with_nan(df)
         if log:
@@ -348,17 +356,24 @@ class Data:
 
     def to_label(self, df, columns=["pred_revenue", "pred_label"]):
         df = df.copy()
+        df["orders"] = 1
+        # df.loc[df["is_canceled"] == 1, "orders"] = 0
         df = (
             df.groupby(
                 ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
             )
             .sum()
             .reset_index()
+            .drop(["orders_in_the_same_day"], axis=1, errors="ignore")
+            .rename(columns={"orders": "orders_in_the_same_day"})
         )
         if "pred_revenue" in df.columns:
             df["pred_label"] = df["pred_revenue"] // 10000
         if "revenue" in df.columns:
             df["label"] = df["revenue"] // 10000
+            df["avg_revenue"] = df["revenue"] / df["orders_in_the_same_day"]
+        if "adr" in df.columns:
+            df["avg_adr"] = df["adr"] / df["orders_in_the_same_day"]
 
         df["arrival_date"] = df.apply(
             lambda x: f"{int(x['arrival_date_year'])}-{int(x['arrival_date_month']):02d}-{int(x['arrival_date_day_of_month']):02d}",
@@ -379,14 +394,64 @@ class Data:
         df = self.to_label(df, columns=columns)
         return df
 
+    def add_orders_in_same_day(self, df):
+        df = df.copy()
+        group_by_date_df = df.groupby(
+            ["arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"]
+        )
+        for date, orders in group_by_date_df:
+            df.loc[orders.index, "orders_in_the_same_day",] = orders.shape[0]
+        return df
+
+    def create_data(
+        self, start_date=(2017, 3, 14), end_date=(2017, 9, 1), ratio=0.5, offset=20
+    ):
+        X_df, y_df = self.processing(["adr", "is_canceled", "revenue", "actual_adr"])
+        df = pd.concat([X_df, y_df], axis=1).copy()
+
+        if is_string_dtype(df.arrival_date_month):
+            df.arrival_date_month = df.arrival_date_month.map(MONTHS)
+        start_date = datetime.date(start_date[0], start_date[1], start_date[2])
+        end_date = datetime.date(end_date[0], end_date[1], end_date[2])
+        day_delta = datetime.timedelta(days=1)
+
+        new_dfs = []
+        while start_date <= end_date:
+            year = start_date.year
+            passed_date = start_date.replace(year=year - 1)
+
+            passed_data = df.loc[
+                (df["arrival_date_year"] == passed_date.year)
+                & (df["arrival_date_month"] == passed_date.month)
+                & (df["arrival_date_day_of_month"] == passed_date.day)
+            ]
+            if passed_data.shape[0] > 1:
+                passed_data.loc[:, "adr"] += offset
+                passed_data.loc[:, "arrival_date_year"] = year
+                new_dfs.append(passed_data)
+
+            start_date += day_delta
+
+        new_df = pd.concat(new_dfs, axis=0)
+        # update revenue & actual_adr
+        new_df = self.add_features(new_df)
+
+        if ratio < 1:
+            np.random.seed(1126)
+            drop_amount = int(new_df.shape[0] * (1 - ratio))
+            drop_indices = np.random.choice(new_df.index, drop_amount, replace=False)
+            new_df = new_df.drop(drop_indices)
+
+        return new_df
+
 
 #%%
 if __name__ == "__main__":
-    data = Data(use_dummies=True, normalize=True)
-    # X_df = data.processing_test_data()
-    # X, y = data.processing(["is_canceled", "adr"])
-    X_df, y_df = data.processing()
-    X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date()
-    assert len(y_train_df.shape[1]) == len(y_test_df.shape) == 1
+    data = Data(use_dummies=False, normalize=False)
+    # x_df, y_df = data.processing(["adr"])
+    # new_x_df = data.add_order_in_same_day(x_df)
+    train_df = data.train_df
+    new_df = data.create_data(train_df, ratio=0.3)
+    new_data = pd.concat([train_df, new_df], axis=0)
+#%%
 
-# %%
