@@ -2,6 +2,7 @@
 from utils import *
 from utils.metrics import regression_report
 
+import threading
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -24,34 +25,45 @@ from sklearn.linear_model import LinearRegression, BayesianRidge, Lars, HuberReg
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from sklearn.metrics import mean_absolute_error, classification_report
 
-is_canceled_clfs = [
-    # (
-    #     "RandomForestClassifier",
-    #     RandomForestClassifier(n_estimators=100, max_depth=40),
-    # ),
-    ("BaggingClassifier", BaggingClassifier()),
-    ("KNeighborsClassifier", KNeighborsClassifier()),
-    # ("MLPClassifier", MLPClassifier(max_iter=1000, early_stopping=True)),
-    # (
-    #     "CalibratedClassifierCV",
-    #     CalibratedClassifierCV(base_estimator=LinearSVC(max_iter=10000)),
-    # ),
-]
 
-adr_regs = [
-    # (
-    #     "RandomForestRegressor",
-    #     RandomForestRegressor(n_estimators=100, max_depth=40),
-    # ),
-    ("BaggingRegressor", BaggingRegressor()),
-    ("HistGradientBoostingRegressor", HistGradientBoostingRegressor()),
-    # ("MLPRegressor", MLPRegressor(max_iter=1000, early_stopping=True)),
-    # ("LinearRegression", LinearRegression()),
-    # ("BayesianRidge", BayesianRidge()),
-    # ("KNeighborsRegressor", KNeighborsRegressor()),
-    # ("Lars", Lars()),
-    # ("HuberRegressor", HuberRegressor(max_iter=10000)),
-]
+def get_models():
+    is_canceled_clfs = [
+        # (
+        #     "RandomForestClassifier",
+        #     RandomForestClassifier(n_estimators=100, max_depth=40, random_state=1129),
+        # ),
+        #     ("BaggingClassifier", BaggingClassifier()),
+        # ("KNeighborsClassifier", KNeighborsClassifier()),
+        # ("MLPClassifier", MLPClassifier(max_iter=1000, early_stopping=True)),
+        # (
+        #     "CalibratedClassifierCV",
+        #     CalibratedClassifierCV(base_estimator=LinearSVC(max_iter=10000)),
+        # ),
+        (
+            "RandomForestRegressor",
+            RandomForestRegressor(n_estimators=100, max_depth=40, random_state=1129),
+        ),
+        # ("MLPRegressor", MLPRegressor(max_iter=1000, early_stopping=True)),
+    ]
+
+    adr_regs = [
+        (
+            "RandomForestRegressor",
+            RandomForestRegressor(n_estimators=100, max_depth=40, random_state=1129),
+        ),
+        #     ("BaggingRegressor", BaggingRegressor()),
+        # (
+        #     "HistGradientBoostingRegressor",
+        #     HistGradientBoostingRegressor(random_state=1129),
+        # ),
+        ("MLPRegressor", MLPRegressor(max_iter=1000, early_stopping=True)),
+        ("LinearRegression", LinearRegression()),
+        # ("BayesianRidge", BayesianRidge()),
+        # ("KNeighborsRegressor", KNeighborsRegressor()),
+        # ("Lars", Lars()),
+        # ("HuberRegressor", HuberRegressor(max_iter=10000)),
+    ]
+    return is_canceled_clfs, adr_regs
 
 
 #%%
@@ -142,10 +154,9 @@ def append_pred(models, df):
 
 
 def train_w_reg_clf(X1_df, X2_df, y1_df, y2_df):
-    clfs = is_canceled_clfs
-    regs = adr_regs
+    clfs, regs = get_models()
 
-    print("-" * 5, f"training classifier", "-" * 5)
+    print(f"[ training classifier ]")
     train_clfs = []
     for idx, (name, clf) in enumerate(clfs):
         clf.fit(X1_df.to_numpy(), y1_df["is_canceled"].to_numpy())
@@ -153,7 +164,7 @@ def train_w_reg_clf(X1_df, X2_df, y1_df, y2_df):
         print(f"[{idx}/{len(clfs)}] {name} score: {score}")
         train_clfs.append((name, clf))
 
-    print("-" * 5, f"training regressor", "-" * 5)
+    print(f"[ training regressor ]")
     train_regs = []
     for idx, (name, reg) in enumerate(regs):
         reg.fit(X1_df.to_numpy(), y1_df["adr"].to_numpy())
@@ -200,6 +211,8 @@ def split_train(estimator_class, X_df, y_df, nsplit=2):
         )
         # print(f"X_train shape: {X_train_df.shape}, y_train shape: {y_train_df.shape}")
         # print(f"X_test shape: {X_test_df.shape}, y_test shape: {y_test_df.shape}")
+        X_train_df, X_test_df = X_test_df, X_train_df
+        y_train_df, y_test_df = y_test_df, y_train_df
         reg, models = cross_train(
             estimator_class, X_train_df, X_test_df, y_train_df, y_test_df
         )
@@ -255,25 +268,23 @@ X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date(
 print(f"X_train shape {X_train_df.shape}, y_train shape {y_train_df.shape}")
 print(f"X_test shape {X_test_df.shape}, y_test shape {y_test_df.shape}")
 
-for i in range(2, 3, 3):
-    print(f"nsplit = {i}")
-    report = main(
-        HistGradientBoostingRegressor,
-        X_train_df,
-        X_test_df,
-        y_train_df,
-        y_test_df,
-        nsplit=i,
-    )
-    print(report)
-    print(f"*Save result to Ensemble_w_Pred_Report.txt")
-    with open(f"Ensemble_w_Pred_Report.txt", "a") as ofile:
-        ofile.write(f"nsplit={i}\n")
-        ofile.write(
-            f"is_canceled classifier: {[name for name, _ in is_canceled_clfs]}\n"
-        )
-        ofile.write(f"adr regressor: {[name for name, _ in adr_regs]}]\n")
-        ofile.write(f"finished time: {datetime.now()}\n\n")
-        ofile.write(report)
-        ofile.write("-" * 10 + " End " + "-" * 10 + "\n")
+
+report = main(
+    HistGradientBoostingRegressor,
+    X_train_df,
+    X_test_df,
+    y_train_df,
+    y_test_df,
+    nsplit=2,
+)
+clfs, regs = get_models()
+print(report)
+print(f"*Save result to Ensemble_w_Pred_Report.txt")
+with open(f"Ensemble_w_Pred_Report2.txt", "a") as ofile:
+    ofile.write(f"nsplit={3}\n")
+    ofile.write(f"is_canceled classifier: {[name for name, _ in clfs]}\n")
+    ofile.write(f"adr regressor: {[name for name, _ in regs]}]\n")
+    ofile.write(f"finished time: {datetime.now()}\n\n")
+    ofile.write(report)
+    ofile.write("-" * 10 + " End " + "-" * 10 + "\n")
 

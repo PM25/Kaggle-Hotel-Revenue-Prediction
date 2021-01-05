@@ -84,10 +84,14 @@ class Data:
         self.fname = fname
         # dataframes
         self.train_df = pd.read_csv(fname, index_col="ID")
-        print(f"Shape of Read Data: {self.train_df.shape}")
+        print(f"Shape of Read Train Data: {self.train_df.shape}")
         self.label_df = pd.read_csv("data/train_label.csv", index_col="arrival_date")
+        print(f"Shape of Read Label Data: {self.label_df.shape}")
+        self.test_df = pd.read_csv("data/test.csv", index_col="ID")
+        print(f"Shape of Read Test Data: {self.test_df.shape}")
         self.clean_train_df = self.preprocessing(self.train_df, log=True)
         self.processed_df = self.processing(log=True)
+        self.category_columns = self.get_category_columns(self.train_df)
 
     def __call__(self, fname):
         self.train_df = pd.read_csv(fname, index_col="ID")
@@ -156,14 +160,7 @@ class Data:
             "actual_adr",
         ]
         df = df.drop(exclude_columns, axis=1, errors="ignore")
-
-        df.children = df.children.fillna(0)
-        nan_cols = get_columns_with_nan(df)
-        if log:
-            print(f"Columns that contain NaN (before):\n {nan_cols}")
-
-        for col in nan_cols:
-            df[col] = df[col].fillna("Null").astype(str)
+        df = self.handle_missing_value(df, log=log)
 
         df = self.label_encoder(df)
         if self.normalize:
@@ -172,7 +169,6 @@ class Data:
             df = self.onehot_encoder(df)
 
         if log:
-            print(f"Columns that contain NaN (after):\n {get_columns_with_nan(df)}")
             print(f"Excluded columns: {exclude_columns}")
             print(f"Processed DataFrame shape: {df.shape}")
 
@@ -238,6 +234,36 @@ class Data:
 
         return out_processed_df
 
+    def get_category_columns(self, df):
+        df = df.copy()
+        category_columns = []
+        for cname in df.columns:
+            if is_string_dtype(df[cname]):
+                category_columns.append(cname)
+        return category_columns
+
+    def handle_missing_value(self, df, log=False):
+        df = df.copy()
+
+        df.children = df.children.fillna(0)
+        nan_cols = get_columns_with_nan(df)
+        for cname in nan_cols:
+            most_cat = df[cname].value_counts().idxmax()
+            df[cname] = df[cname].fillna(most_cat)
+
+        # assign not intersection of training & testing data as the most category
+        for cname in set(self.get_category_columns(df) + nan_cols):
+            most_cat = df[cname].value_counts().idxmax()
+            df.loc[
+                ~df[cname].isin(self.test_df[cname]), cname
+            ] = most_cat  # intersection of training & testing data
+            df[cname] = df[cname].astype(str)
+
+        if log:
+            print(f"Columns that contain NaN (before):\n {nan_cols}")
+            print(f"Columns that contain NaN (after):\n {get_columns_with_nan(df)}")
+        return df
+
     def onehot_encoder(self, df, refit=False):
         if self.onehot_encoders != None and refit == False:
             dummies_df = df.copy()
@@ -274,9 +300,13 @@ class Data:
                 encoder_dict = dict(
                     zip(encoder.classes_, encoder.transform(encoder.classes_))
                 )
-                # handling previous unseen label (assign -1)
+                # handling previous unseen label (assign most categorical's value)
+                most_cat = df[cname].value_counts().idxmax()
+                most_cat_val = encoder_dict.get(most_cat, -1)
                 df[cname] = (
-                    df[cname].apply(lambda x: encoder_dict.get(x, -1)).astype(int)
+                    df[cname]
+                    .apply(lambda x: encoder_dict.get(x, most_cat_val))
+                    .astype("category")
                 )
         else:
             encoders = {}
@@ -420,13 +450,14 @@ class Data:
             year = start_date.year
             passed_date = start_date.replace(year=year - 1)
 
-            passed_data = df.loc[
+            passed_data = df[
                 (df["arrival_date_year"] == passed_date.year)
                 & (df["arrival_date_month"] == passed_date.month)
                 & (df["arrival_date_day_of_month"] == passed_date.day)
-            ]
+            ].copy()
+
             if passed_data.shape[0] > 1:
-                passed_data.loc[:, "adr"] += offset
+                passed_data.loc[:, "adr"] = passed_data["adr"] + offset
                 passed_data.loc[:, "arrival_date_year"] = year
                 new_dfs.append(passed_data)
 
@@ -450,8 +481,17 @@ if __name__ == "__main__":
     data = Data(use_dummies=False, normalize=False)
     # x_df, y_df = data.processing(["adr"])
     # new_x_df = data.add_order_in_same_day(x_df)
-    train_df = data.train_df
-    new_df = data.create_data(train_df, ratio=0.3)
-    new_data = pd.concat([train_df, new_df], axis=0)
+    # train_df = data.train_df["company"]
+    # test_df = data.test_df["company"]
+    # new_df = data.create_data(train_df, ratio=0.3)
+    # new_data = pd.concat([train_df, new_df], axis=0)
+
+    # X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date(
+    #     ["actual_adr"], test_ratio=0.3
+    # )
+    X_df, y_df = data.processing()
+    a = X_df["company"].value_counts()
+    print(a)
+
 #%%
 

@@ -34,9 +34,9 @@ class BinaryClassificationModel(nn.Module):
 class Input1DModelSimplified(nn.Module):
     def __init__(self, nfeatures, nout):
         super().__init__()
-        self.fc1 = nn.Linear(nfeatures, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, nout)
+        self.fc1 = nn.Linear(nfeatures, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, nout)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):

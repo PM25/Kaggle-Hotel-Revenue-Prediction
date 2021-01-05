@@ -10,8 +10,9 @@ import torch.nn.functional as F
 import pandas as pd
 
 #%%
-data = Data(use_dummies=False)
-X_np, y_np = data.processing("adr", normalize=True)
+data = Data(use_dummies=False, normalize=False)
+X_df, y_df = data.processing(["actual_adr"])
+X_np, y_np = X_df.to_numpy(), y_df.to_numpy()
 print(f"X_np's shape: {X_np.shape}")
 print(f"y_np's shape: {y_np.shape}")
 
@@ -19,13 +20,13 @@ print(f"y_np's shape: {y_np.shape}")
 #%%
 train_loader, val_loader, test_loader = LoadData(
     X_y=(X_np, y_np), X_y_dtype=("float", "float")
-).get_dataloader([0.7, 0.2, 0.1], batch_size=64)
+).get_dataloader([0.65, 0.15, 0.2], batch_size=128)
 
 
 # %% start from here!
 if __name__ == "__main__":
     # setting
-    model = Input1DModel(X_np.shape[1], 1)
+    model = Input1DModelSimplified(X_np.shape[1], 1)
     loss_func = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     modelwrapper = ModelWrapper(model, loss_func, optimizer)
