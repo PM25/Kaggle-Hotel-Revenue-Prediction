@@ -475,6 +475,47 @@ class Data:
 
         return new_df
 
+    def duplicate_data(
+        self, start_date=(2017, 3, 14), end_date=(2017, 9, 1), ratio=0.5, offset=20
+    ):
+        X_df, y_df = self.processing(["adr", "is_canceled", "revenue", "actual_adr"])
+        df = pd.concat([X_df, y_df], axis=1).copy()
+
+        if is_string_dtype(df.arrival_date_month):
+            df.arrival_date_month = df.arrival_date_month.map(MONTHS)
+        start_date = datetime.date(start_date[0], start_date[1], start_date[2])
+        end_date = datetime.date(end_date[0], end_date[1], end_date[2])
+        day_delta = datetime.timedelta(days=1)
+
+        new_dfs = []
+        while start_date <= end_date:
+            year = start_date.year
+
+            duplicate_df = df[
+                (df["arrival_date_year"] == start_date.year)
+                & (df["arrival_date_month"] == start_date.month)
+                & (df["arrival_date_day_of_month"] == start_date.day)
+            ].copy()
+
+            if duplicate_df.shape[0] > 1:
+                duplicate_df.loc[:, "adr"] = duplicate_df["adr"] + offset
+                duplicate_df.loc[:, "arrival_date_year"] = year
+                new_dfs.append(duplicate_df)
+
+            start_date += day_delta
+
+        duplicate_df = pd.concat(new_dfs, axis=0)
+        # update revenue & actual_adr
+        duplicate_df = self.add_features(duplicate_df)
+
+        if ratio < 1:
+            np.random.seed(1126)
+            drop_amount = int(duplicate_df.shape[0] * (1 - ratio))
+            drop_indices = np.random.choice(duplicate_df.index, drop_amount, replace=False)
+            duplicate_df = duplicate_df.drop(drop_indices)
+
+        return duplicate_df
+
 
 #%%
 if __name__ == "__main__":

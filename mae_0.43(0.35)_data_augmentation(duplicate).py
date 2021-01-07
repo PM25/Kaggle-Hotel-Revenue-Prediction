@@ -14,7 +14,8 @@ X_train_df, X_test_df, y_train_df, y_test_df = data.train_test_split_by_date(
     ["actual_adr"], test_ratio=0.3
 )
 train_df = pd.concat([X_train_df, y_train_df], axis=1)
-created_df = data.create_data((2016, 9, 1), (2017, 3, 31), ratio=0.1, offset=5)
+created_df = data.duplicate_data((2015, 6, 1), (2016, 3, 31), ratio=1)
+# created_df = data.create_data((2016, 6, 1), (2017, 3, 31), ratio=1, offset=5)
 augmented_df = pd.concat([train_df, created_df[train_df.columns]], axis=0)
 y_train_df = augmented_df[["actual_adr"]]
 X_train_df = augmented_df.drop(["actual_adr"], axis=1)
@@ -52,7 +53,7 @@ print(report_revenue)
 #%% training with all data
 X_df, y_df = data.processing(["actual_adr"])
 train_df = pd.concat([X_df, y_df], axis=1)
-created_df = data.create_data(ratio=0.1, offset=5)
+created_df = data.duplicate_data(ratio=0.8)
 augmented_df = pd.concat([train_df, created_df[train_df.columns]], axis=0)
 y_df = augmented_df[["actual_adr"]]
 X_df = augmented_df.drop(["actual_adr"], axis=1)
